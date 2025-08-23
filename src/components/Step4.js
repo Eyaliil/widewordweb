@@ -1,9 +1,14 @@
 import React from 'react';
 import { MOCK_USERS } from '../data/mockUsers';
 
-const Step4 = ({ me, isOnline, setIsOnline, isMatching, setIsMatching, match, setMatch, setMessages, setShowChat }) => {
+const Step4 = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatching, setIsMatching, match, setMatch, setMessages, setShowChat, onEditProfile }) => {
   // Go online and find match
   const goOnline = () => {
+    if (!isProfileComplete) {
+      alert('Please complete your profile first!');
+      return;
+    }
+    
     setIsOnline(true);
     setIsMatching(true);
     
@@ -30,13 +35,77 @@ const Step4 = ({ me, isOnline, setIsOnline, isMatching, setIsMatching, match, se
     <div className="max-w-6xl mx-auto">
       <h1 className="text-4xl font-bold text-center text-gray-800 mb-8">The Room</h1>
       
+      {/* Profile Status */}
+      {!isProfileComplete && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8 text-center">
+          <div className="text-yellow-600 mb-4">
+            <div className="text-4xl mb-2">⚠️</div>
+            <h2 className="text-xl font-semibold mb-2">Profile Incomplete</h2>
+            <p className="text-yellow-700">You need to complete your profile before you can match with others.</p>
+          </div>
+          <button
+            onClick={onEditProfile}
+            className="px-6 py-3 bg-yellow-500 text-white font-medium rounded-lg hover:bg-yellow-600 transition-colors duration-200"
+          >
+            Complete Profile
+          </button>
+        </div>
+      )}
+
+      {/* Profile Summary */}
+      {isProfileComplete && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4 text-center">Your Profile</h2>
+          <div className="flex items-center justify-center space-x-6">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full mx-auto flex items-center justify-center text-3xl border-2 border-white shadow-lg mb-3">
+                {avatar.type === 'image' && avatar.image ? (
+                  <img src={avatar.image} alt="Avatar" className="w-full h-full rounded-full object-cover" />
+                ) : (
+                  avatar.initials || avatar.emoji
+                )}
+              </div>
+              <p className="font-medium text-gray-800">{me.name}</p>
+              <p className="text-sm text-gray-500">{me.age} • {me.pronouns}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-600 mb-2">{me.bio}</p>
+              <div className="flex flex-wrap gap-1 justify-center">
+                {me.interests.slice(0, 3).map(interest => (
+                  <span key={interest} className="px-2 py-1 bg-pink-100 text-pink-700 text-xs rounded-full">
+                    {interest}
+                  </span>
+                ))}
+                {me.interests.length > 3 && (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                    +{me.interests.length - 3} more
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onEditProfile}
+              className="px-4 py-2 bg-gray-500 text-white text-sm rounded-lg hover:bg-gray-600 transition-colors duration-200"
+            >
+              Edit Profile
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Online Status */}
       {!isOnline ? (
         <div className="text-center mb-8">
           <button
             onClick={goOnline}
-            className="px-8 py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold rounded-lg text-lg hover:from-pink-600 hover:to-purple-600 transition-all duration-200 shadow-lg"
+            disabled={!isProfileComplete}
+            className={`px-8 py-4 font-semibold rounded-lg text-lg transition-all duration-200 shadow-lg ${
+              isProfileComplete
+                ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
           >
-            Go Online
+            {isProfileComplete ? 'Go Online' : 'Complete Profile to Go Online'}
           </button>
         </div>
       ) : isMatching ? (
@@ -98,7 +167,7 @@ const Step4 = ({ me, isOnline, setIsOnline, isMatching, setIsMatching, match, se
       
       <div className="mt-8 text-center text-gray-600">
         <p className="text-lg">Scroll to discover more people in The Room</p>
-        <p className="text-sm mt-2">Tap on avatars to learn more about them</p>
+        <p className="text-sm mt-2">Complete your profile to start matching!</p>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import Step4 from './components/Step4';
 import ChatModal from './components/ChatModal';
 
 function App() {
-  const [step, setStep] = useState(1);
+  const [currentView, setCurrentView] = useState('room'); // 'room', 'step1', 'step2', 'step3'
   const [me, setMe] = useState({
     name: '',
     age: '',
@@ -36,9 +36,15 @@ function App() {
   const [isMatching, setIsMatching] = useState(false);
   const [showChat, setShowChat] = useState(false);
 
+  // Check if profile is complete
+  const isProfileComplete = () => {
+    return me.name && me.age && me.pronouns && me.bio && me.interests.length > 0 &&
+           avatar.type && lookingFor.genders.length > 0 && lookingFor.interests.length > 0 && lookingFor.vibe;
+  };
+
   // Navigation functions
-  const nextStep = () => setStep(step + 1);
-  const prevStep = () => setStep(step - 1);
+  const goToStep = (step) => setCurrentView(step);
+  const goToRoom = () => setCurrentView('room');
 
   // Leave chat
   const leaveChat = () => {
@@ -48,28 +54,42 @@ function App() {
     setIsOnline(false);
   };
 
-  // Render current step
-  const renderCurrentStep = () => {
-    switch (step) {
-      case 1:
-        return <Step1 me={me} setMe={setMe} onNext={nextStep} />;
-      case 2:
-        return <Step2 avatar={avatar} setAvatar={setAvatar} onNext={nextStep} onBack={prevStep} />;
-      case 3:
-        return <Step3 me={me} avatar={avatar} lookingFor={lookingFor} setLookingFor={setLookingFor} onNext={nextStep} onBack={prevStep} />;
-      case 4:
-        return <Step4 me={me} isOnline={isOnline} setIsOnline={setIsOnline} isMatching={isMatching} setIsMatching={setIsMatching} match={match} setMatch={setMatch} setMessages={setMessages} setShowChat={setShowChat} />;
+  // Render current view
+  const renderCurrentView = () => {
+    switch (currentView) {
+      case 'step1':
+        return <Step1 me={me} setMe={setMe} onNext={() => goToStep('step2')} onBack={goToRoom} />;
+      case 'step2':
+        return <Step2 avatar={avatar} setAvatar={setAvatar} onNext={() => goToStep('step3')} onBack={() => goToStep('step1')} />;
+      case 'step3':
+        return <Step3 me={me} avatar={avatar} lookingFor={lookingFor} setLookingFor={setLookingFor} onNext={goToRoom} onBack={() => goToStep('step2')} />;
+      case 'room':
       default:
-        return <div>Step not found</div>;
+        return (
+          <Step4 
+            me={me} 
+            avatar={avatar}
+            isProfileComplete={isProfileComplete()}
+            isOnline={isOnline} 
+            setIsOnline={setIsOnline} 
+            isMatching={isMatching} 
+            setIsMatching={setIsMatching} 
+            match={match} 
+            setMatch={setMatch} 
+            setMessages={setMessages} 
+            setShowChat={setShowChat}
+            onEditProfile={() => goToStep('step1')}
+          />
+        );
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100">
-      <Header step={step} />
+      <Header currentView={currentView} />
 
       <div className="container mx-auto px-4 py-8">
-        {renderCurrentStep()}
+        {renderCurrentView()}
       </div>
 
       {showChat && match && (

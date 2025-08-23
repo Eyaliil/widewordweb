@@ -1,12 +1,34 @@
 import React from 'react';
 
-const Header = ({ step }) => {
+const Header = ({ currentView }) => {
+  // Get current step number for progress
+  const getCurrentStep = () => {
+    switch (currentView) {
+      case 'step1': return 1;
+      case 'step2': return 2;
+      case 'step3': return 3;
+      case 'room': return 4;
+      default: return 1;
+    }
+  };
+
+  // Get view title
+  const getViewTitle = () => {
+    switch (currentView) {
+      case 'step1': return 'About You';
+      case 'step2': return 'Choose Avatar';
+      case 'step3': return 'Looking For';
+      case 'room': return 'The Room';
+      default: return 'WideWordWeb';
+    }
+  };
+
   // Progress bar component
   const ProgressBar = () => (
     <div className="w-full bg-gray-200 rounded-full h-2">
       <div 
         className="bg-gradient-to-r from-pink-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-        style={{ width: `${(step / 5) * 100}%` }}
+        style={{ width: `${(getCurrentStep() / 4) * 100}%` }}
       ></div>
     </div>
   );
@@ -14,21 +36,22 @@ const Header = ({ step }) => {
   // Step indicator component
   const StepIndicator = () => (
     <div className="flex justify-between items-center mb-6">
-      {[1, 2, 3, 4, 5].map((stepNum) => (
-        <div key={stepNum} className="flex flex-col items-center">
+      {[
+        { key: 'step1', label: 'About You', icon: '👤' },
+        { key: 'step2', label: 'Avatar', icon: '🖼️' },
+        { key: 'step3', label: 'Looking For', icon: '🔍' },
+        { key: 'room', label: 'The Room', icon: '🏠' }
+      ].map((step) => (
+        <div key={step.key} className="flex flex-col items-center">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-            stepNum <= step 
+            step.key === currentView
               ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white' 
               : 'bg-gray-200 text-gray-500'
           }`}>
-            {stepNum}
+            {step.icon}
           </div>
           <div className="text-xs text-gray-500 mt-1 hidden sm:block">
-            {stepNum === 1 && 'About You'}
-            {stepNum === 2 && 'Avatar'}
-            {stepNum === 3 && 'Looking For'}
-            {stepNum === 4 && 'The Room'}
-            {stepNum === 5 && 'Chat'}
+            {step.label}
           </div>
         </div>
       ))}
@@ -44,7 +67,7 @@ const Header = ({ step }) => {
             <ProgressBar />
           </div>
           <div className="text-sm text-gray-600">
-            Step {step} of 5
+            {getViewTitle()}
           </div>
         </div>
         <StepIndicator />

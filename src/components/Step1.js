@@ -2,7 +2,7 @@ import React from 'react';
 import { INTERESTS, PRONOUNS } from '../data/constants';
 import { isStep1Valid } from '../utils/validation';
 
-const Step1 = ({ me, setMe, onNext }) => {
+const Step1 = ({ me, setMe, onNext, onBack }) => {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Tell us about yourself</h1>
@@ -96,7 +96,13 @@ const Step1 = ({ me, setMe, onNext }) => {
         </div>
       </div>
 
-      <div className="mt-8 flex justify-end">
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-8 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors duration-200"
+        >
+          Back to Room
+        </button>
         <button
           onClick={onNext}
           disabled={!isStep1Valid(me)}
