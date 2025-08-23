@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import Header from './components/Header';
 import ProfileForm from './components/ProfileForm';
 import AvatarForm from './components/AvatarForm';
 import PreferencesForm from './components/PreferencesForm';
@@ -66,17 +65,17 @@ function App() {
       case 'room':
       default:
         return (
-          <TheRoom 
-            me={me} 
+          <TheRoom
+            me={me}
             avatar={avatar}
             isProfileComplete={isProfileComplete()}
-            isOnline={isOnline} 
-            setIsOnline={setIsOnline} 
-            isMatching={isMatching} 
-            setIsMatching={setIsMatching} 
-            match={match} 
-            setMatch={setMatch} 
-            setMessages={setMessages} 
+            isOnline={isOnline}
+            setIsOnline={setIsOnline}
+            isMatching={isMatching}
+            setIsMatching={setIsMatching}
+            match={match}
+            setMatch={setMatch}
+            setMessages={setMessages}
             setShowChat={setShowChat}
             onEditProfile={() => goToStep('profile')}
           />
@@ -85,9 +84,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100">
-      <Header currentView={currentView} />
-
+    <div className="min-h-screen bg-white">
       <div className="container mx-auto px-4 py-8">
         {renderCurrentView()}
       </div>
