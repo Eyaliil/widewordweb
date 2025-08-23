@@ -6,33 +6,33 @@ const CAMERA_D = 800;       // perspective distance
 const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatching, setIsMatching, match, setMatch, setMessages, setShowChat, onEditProfile }) => {
   const canvasRef = useRef(null);
   const [users, setUsers] = useState([]);
-  const [rotation, setRotation] = useState({ x: 0, y: 0 });
+  const [rotation, setRotation] = useState({ x: 0, y: 180 }); // Start rotated 180° to flip the sphere
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
-  // Initialize users with 3D positions on the top surface only (gravity effect)
+  // Initialize users with 3D positions on the sphere surface (not just top)
   useEffect(() => {
     const updateUsers = () => {
       const sphereUsers = MOCK_USERS.slice(0, 20).map((user, index) => {
-        // Distribute users only on the top surface (like they're standing on the globe)
-        // Use Fibonacci spiral for even distribution on a circle
+        // Distribute users evenly across the entire sphere surface
+        // Use Fibonacci spiral for even distribution
         const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-        const radius = Math.min(window.innerWidth, window.innerHeight) * 0.35; // Slightly smaller than globe
+        const radius = Math.min(window.innerWidth, window.innerHeight) * 0.35;
         
-        // Calculate position on the top surface
+        // Calculate position on the entire sphere surface
         const t = index / 20;
-        const inclination = Math.acos(1 - 2 * t); // 0 to π/2 (top hemisphere)
+        const inclination = Math.acos(1 - 2 * t); // 0 to π (entire sphere)
         const azimuth = index * goldenAngle;
         
-        // Position on the surface (x, y on the circle, z at the top)
+        // Position on the sphere surface
         const x = radius * Math.cos(azimuth) * Math.sin(inclination);
         const y = radius * Math.sin(azimuth) * Math.sin(inclination);
-        const z = radius * Math.cos(inclination); // This ensures they're on the surface
+        const z = radius * Math.cos(inclination);
         
         return {
           ...user,
           position: { x, y, z },
-          originalPosition: { x, y, z } // Store original for gravity calculations
+          originalPosition: { x, y, z } // Store original for rotation calculations
         };
       });
       setUsers(sphereUsers);
@@ -144,10 +144,26 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
     const lightY = -0.3;
     const lightZ = 0.8;
     
-    // Draw sphere with 3D lighting effect
+    // Draw filled sphere with 3D lighting effect
     const segments = 60; // Number of segments for smooth sphere
     const rings = 30;    // Number of rings for smooth sphere
     
+    // Create radial gradient for the sphere
+    const gradient = ctx.createRadialGradient(
+      centerX, sphereY, 0,
+      centerX, sphereY, sphereRadius
+    );
+    gradient.addColorStop(0, 'rgba(240, 240, 240, 0.9)'); // Light center
+    gradient.addColorStop(0.7, 'rgba(200, 200, 200, 0.8)'); // Medium
+    gradient.addColorStop(1, 'rgba(160, 160, 160, 0.7)'); // Darker edges
+    
+    // Draw the main sphere fill
+    ctx.beginPath();
+    ctx.arc(centerX, sphereY, sphereRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
+    // Add subtle shading for 3D effect
     for (let ring = 0; ring < rings; ring++) {
       const phi = (ring / (rings - 1)) * Math.PI; // 0 to π
       const y = sphereRadius * Math.cos(phi);
@@ -185,17 +201,17 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
         const screenX = centerX + rx * scale;
         const screenY = sphereY + ry * scale;
         
-        // Only draw if visible (in front)
+        // Only draw shading if visible (in front)
         if (rz > -sphereRadius) {
           // Calculate lighting for this point
           const lighting = calculateLighting(x, y, z, lightX, lightY, lightZ);
           
-          // Create gradient based on lighting - black and white theme
-          const alpha = 0.1 + lighting * 0.6; // Vary transparency based on lighting
+          // Add subtle shading dots for depth
+          const alpha = 0.1 + lighting * 0.2; // Subtle shading
           
-          // Draw small circle for this segment
+          // Draw small shading dots
           ctx.beginPath();
-          ctx.arc(screenX, screenY, 2, 0, 2 * Math.PI);
+          ctx.arc(screenX, screenY, 1.5, 0, 2 * Math.PI);
           ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
           ctx.fill();
         }
@@ -215,19 +231,19 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fill();
 
-    // Apply gravity physics to keep avatars on the surface
+    // Apply rotation to avatars - they stay attached to their sphere surface points
     const updatedUsers = users.map(user => {
       const cosX = Math.cos(rotation.x * Math.PI / 180);
       const sinX = Math.sin(rotation.x * Math.PI / 180);
       const cosY = Math.cos(rotation.y * Math.PI / 180);
       const sinY = Math.sin(rotation.y * Math.PI / 180);
 
-      // Start with original position
+      // Start with original position (fixed point on sphere surface)
       let x = user.originalPosition.x;
       let y = user.originalPosition.y;
       let z = user.originalPosition.z;
 
-      // Apply rotation
+      // Apply rotation - avatars rotate with the sphere
       let tempX = x * cosY - z * sinY;
       let tempZ = x * sinY + z * cosY;
       x = tempX;
@@ -237,27 +253,6 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
       let tempZ2 = y * sinX + z * cosX;
       y = tempY;
       z = tempZ2;
-
-      // Apply gravity: force avatars to stay on the EXTERIOR surface
-      const distance = Math.sqrt(x * x + y * y + z * z);
-      if (distance > 0) {
-        const targetRadius = Math.min(window.innerWidth, window.innerHeight) * 0.35;
-        // Ensure avatars stay on the EXTERIOR surface by using the target radius
-        x = (x / distance) * targetRadius;
-        y = (y / distance) * targetRadius;
-        z = (z / distance) * targetRadius;
-        
-        // Force Z to be positive (top surface only) and ensure they're on the surface
-        if (z < 0) {
-          z = 0;
-          // Recalculate x,y to maintain surface position
-          const surfaceDistance = Math.sqrt(x * x + y * y);
-          if (surfaceDistance > 0) {
-            x = (x / surfaceDistance) * targetRadius;
-            y = (y / surfaceDistance) * targetRadius;
-          }
-        }
-      }
 
       return {
         ...user,
@@ -270,20 +265,19 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
 
     // Draw each user avatar
     sortedUsers.forEach(user => {
-      // Use gravity-corrected position (already rotated and surface-constrained)
+      // Use rotated position (avatars stay attached to sphere surface)
       const x = user.position.x;
       const y = user.position.y;
       const z = user.position.z;
 
-      // Project 3D to 2D - ensure avatars are on the surface
+      // Project 3D to 2D
       const scale = CAMERA_D / (CAMERA_D + z);
       const screenX = centerX + x * scale;
-      // Position avatars ON the sphere surface, not floating above
-      const screenY = sphereY + y * scale;
-      const avatarSize = Math.max(30, 50 * scale); // Larger avatars
+      const screenY = centerY + y * scale;
+      const avatarSize = Math.max(20, 40 * scale); // Slightly smaller avatars
 
-      // Only draw if avatar is visible and on the sphere surface
-      if (z >= 0 && screenY <= sphereY + sphereRadius && screenY >= sphereY - sphereRadius) {
+      // Only draw if avatar is visible (in front of camera AND on back side of sphere)
+      if (z > -sphereRadius && z < 0) {
         // Draw avatar background
         ctx.beginPath();
         ctx.arc(screenX, screenY, avatarSize, 0, 2 * Math.PI);
@@ -300,8 +294,8 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
         ctx.fillStyle = 'white';
         ctx.fillText(user.emojiAvatar, screenX, screenY);
 
-        // Draw name if close enough
-        if (scale > 0.5) {
+        // Draw name if close enough and avatar is visible
+        if (scale > 0.3 && z > 0) {
           ctx.font = '12px Arial';
           ctx.fillStyle = '#000000';
           ctx.fillText(user.name, screenX, screenY - avatarSize - 10);
