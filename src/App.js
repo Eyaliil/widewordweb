@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import Header from './components/Header';
-import Step1 from './components/Step1';
-import Step2 from './components/Step2';
-import Step3 from './components/Step3';
-import Step4 from './components/Step4';
+import ProfileForm from './components/ProfileForm';
+import AvatarForm from './components/AvatarForm';
+import PreferencesForm from './components/PreferencesForm';
+import TheRoom from './components/TheRoom';
 import ChatModal from './components/ChatModal';
 
 function App() {
-  const [currentView, setCurrentView] = useState('room'); // 'room', 'step1', 'step2', 'step3'
+  const [currentView, setCurrentView] = useState('room'); // 'room', 'profile', 'avatar', 'preferences'
   const [me, setMe] = useState({
     name: '',
     age: '',
@@ -57,16 +57,16 @@ function App() {
   // Render current view
   const renderCurrentView = () => {
     switch (currentView) {
-      case 'step1':
-        return <Step1 me={me} setMe={setMe} onNext={() => goToStep('step2')} onBack={goToRoom} />;
-      case 'step2':
-        return <Step2 avatar={avatar} setAvatar={setAvatar} onNext={() => goToStep('step3')} onBack={() => goToStep('step1')} />;
-      case 'step3':
-        return <Step3 me={me} avatar={avatar} lookingFor={lookingFor} setLookingFor={setLookingFor} onNext={goToRoom} onBack={() => goToStep('step2')} />;
+      case 'profile':
+        return <ProfileForm me={me} setMe={setMe} onNext={() => goToStep('avatar')} onBack={goToRoom} />;
+      case 'avatar':
+        return <AvatarForm avatar={avatar} setAvatar={setAvatar} onNext={() => goToStep('preferences')} onBack={() => goToStep('profile')} />;
+      case 'preferences':
+        return <PreferencesForm me={me} avatar={avatar} lookingFor={lookingFor} setLookingFor={setLookingFor} onNext={goToRoom} onBack={() => goToStep('avatar')} />;
       case 'room':
       default:
         return (
-          <Step4 
+          <TheRoom 
             me={me} 
             avatar={avatar}
             isProfileComplete={isProfileComplete()}
@@ -78,7 +78,7 @@ function App() {
             setMatch={setMatch} 
             setMessages={setMessages} 
             setShowChat={setShowChat}
-            onEditProfile={() => goToStep('step1')}
+            onEditProfile={() => goToStep('profile')}
           />
         );
     }

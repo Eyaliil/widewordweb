@@ -4,9 +4,9 @@ const Header = ({ currentView }) => {
   // Get current step number for progress
   const getCurrentStep = () => {
     switch (currentView) {
-      case 'step1': return 1;
-      case 'step2': return 2;
-      case 'step3': return 3;
+      case 'profile': return 1;
+      case 'avatar': return 2;
+      case 'preferences': return 3;
       case 'room': return 4;
       default: return 1;
     }
@@ -15,9 +15,9 @@ const Header = ({ currentView }) => {
   // Get view title
   const getViewTitle = () => {
     switch (currentView) {
-      case 'step1': return 'About You';
-      case 'step2': return 'Choose Avatar';
-      case 'step3': return 'Looking For';
+      case 'profile': return 'About You';
+      case 'avatar': return 'Choose Avatar';
+      case 'preferences': return 'Looking For';
       case 'room': return 'The Room';
       default: return 'WideWordWeb';
     }
@@ -37,9 +37,9 @@ const Header = ({ currentView }) => {
   const StepIndicator = () => (
     <div className="flex justify-between items-center mb-6">
       {[
-        { key: 'step1', label: 'About You', icon: '👤' },
-        { key: 'step2', label: 'Avatar', icon: '🖼️' },
-        { key: 'step3', label: 'Looking For', icon: '🔍' },
+        { key: 'profile', label: 'About You', icon: '👤' },
+        { key: 'avatar', label: 'Avatar', icon: '🖼️' },
+        { key: 'preferences', label: 'Looking For', icon: '🔍' },
         { key: 'room', label: 'The Room', icon: '🏠' }
       ].map((step) => (
         <div key={step.key} className="flex flex-col items-center">
