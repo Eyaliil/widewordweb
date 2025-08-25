@@ -4,6 +4,7 @@ import AvatarForm from './components/AvatarForm';
 import PreferencesForm from './components/PreferencesForm';
 import TheRoom from './components/TheRoom';
 import ChatModal from './components/ChatModal';
+import Header from './components/Header';
 
 function App() {
   const [currentView, setCurrentView] = useState('room'); // 'room', 'profile', 'avatar', 'preferences'
@@ -85,6 +86,9 @@ function App() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Show header on all pages except the room */}
+      {currentView !== 'room' && <Header currentView={currentView} />}
+      
       <div className="container mx-auto px-4 py-8">
         {renderCurrentView()}
       </div>
