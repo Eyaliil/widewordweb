@@ -1,8 +1,59 @@
 import React from 'react';
 import { INTERESTS, GENDERS, VIBES, DEAL_BREAKERS } from '../data/constants';
 import { isStep3Valid } from '../utils/validation';
+import { supabase } from '../lib/supabaseClient';
 
 const Step3 = ({ me, avatar, lookingFor, setLookingFor, onNext, onBack }) => {
+  const saveInterests = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not signed in');
+
+    if (!me.interests || me.interests.length === 0) {
+      throw new Error('Please select at least one interest');
+    }
+
+    // Fetch existing interests by label (expects table pre-seeded)
+    const { data: interestRows, error: selErr } = await supabase
+      .from('interests')
+      .select('id, label')
+      .in('label', me.interests);
+    if (selErr) throw selErr;
+
+    if (!interestRows || interestRows.length === 0) {
+      throw new Error('No matching interests found in DB. Seed the interests table.');
+    }
+
+    // Warn if some selected labels were not found (likely missing seed rows)
+    const foundLabels = new Set(interestRows.map(r => r.label));
+    const missing = me.interests.filter(lbl => !foundLabels.has(lbl));
+    if (missing.length > 0) {
+      throw new Error(`These interests are not set up in DB: ${missing.join(', ')}`);
+    }
+
+    const ids = interestRows.map(r => r.id);
+
+    // Replace user_interests rows for this user
+    const { error: delErr } = await supabase
+      .from('user_interests')
+      .delete()
+      .eq('user_id', user.id);
+    if (delErr) throw delErr;
+
+    const rows = ids.map(id => ({ user_id: user.id, interest_id: id }));
+    const { error: insErr } = await supabase
+      .from('user_interests')
+      .insert(rows);
+    if (insErr) throw insErr;
+  };
+
+  const handleNext = async () => {
+    try {
+      await saveInterests();
+      onNext();
+    } catch (e) {
+      alert(e.message || 'Failed to save preferences');
+    }
+  };
   return (
     <div className="max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Who are you looking for?</h1>
@@ -192,7 +243,7 @@ const Step3 = ({ me, avatar, lookingFor, setLookingFor, onNext, onBack }) => {
           Back
         </button>
         <button
-          onClick={onNext}
+          onClick={handleNext}
           disabled={!isStep3Valid(lookingFor)}
           className="px-8 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-600 transition-all duration-200"
         >

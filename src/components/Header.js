@@ -1,4 +1,5 @@
 import React from 'react';
+import AuthPanel from './AuthPanel';
 
 const Header = ({ currentView }) => {
   // Get current step number for progress
@@ -66,8 +67,9 @@ const Header = ({ currentView }) => {
           <div className="flex-1 max-w-md">
             <ProgressBar />
           </div>
-          <div className="text-sm text-gray-600">
-            {getViewTitle()}
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-600">{getViewTitle()}</div>
+            <AuthPanel />
           </div>
         </div>
         <StepIndicator />

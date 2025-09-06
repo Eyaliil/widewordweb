@@ -96,3 +96,109 @@ You can easily customize:
 - Content by updating the constants in data/
 - Avatar styles by changing the emoji or styling
 - Validation rules in utils/validation.js 
+
+## Supabase Setup
+
+1. Create a project at https://app.supabase.com
+2. Get your Project URL and anon public key from Project Settings → API.
+3. Copy `.env.example` to `.env` and fill:
+
+```
+REACT_APP_SUPABASE_URL=your-url
+REACT_APP_SUPABASE_ANON_KEY=your-anon-key
+```
+
+4. Install packages:
+
+```
+npm install @supabase/supabase-js
+```
+
+5. The Supabase client is created in `src/lib/supabaseClient.js`.
+
+### Database schema (SQL)
+Create tables in the SQL editor:
+
+```sql
+-- profiles
+create table if not exists profiles (
+  id uuid primary key references auth.users on delete cascade,
+  created_at timestamp with time zone default now(),
+  name text,
+  age int,
+  pronouns text,
+  city text,
+  bio text
+);
+
+-- interests (lookup)
+create table if not exists interests (
+  id bigserial primary key,
+  label text unique not null
+);
+
+-- user_interests (join)
+create table if not exists user_interests (
+  user_id uuid references profiles(id) on delete cascade,
+  interest_id bigint references interests(id) on delete cascade,
+  primary key (user_id, interest_id)
+);
+
+-- matches
+create table if not exists matches (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamp with time zone default now(),
+  user_a uuid references profiles(id) on delete cascade,
+  user_b uuid references profiles(id) on delete cascade,
+  status text check (status in ('pending','active','ended')) default 'pending'
+);
+
+-- messages
+create table if not exists messages (
+  id bigserial primary key,
+  created_at timestamp with time zone default now(),
+  match_id uuid references matches(id) on delete cascade,
+  sender uuid references profiles(id) on delete cascade,
+  content text not null
+);
+```
+
+### RLS Policies
+Enable RLS and add policies:
+
+```sql
+alter table profiles enable row level security;
+alter table user_interests enable row level security;
+alter table interests enable row level security;
+alter table matches enable row level security;
+alter table messages enable row level security;
+
+-- Only a user can read/update their profile
+create policy "Read own profile" on profiles for select using (auth.uid() = id);
+create policy "Update own profile" on profiles for update using (auth.uid() = id);
+create policy "Insert own profile" on profiles for insert with check (auth.uid() = id);
+
+-- Interests: read-only for everyone
+create policy "Read interests" on interests for select using (true);
+
+-- User interests: only owner can manage
+create policy "Manage own interests" on user_interests
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Matches: participant-only access
+create policy "Read own matches" on matches for select using (auth.uid() in (user_a, user_b));
+create policy "Insert with self as participant" on matches for insert with check (auth.uid() in (user_a, user_b));
+
+-- Messages: only participants can read/write
+create policy "Read messages in own matches" on messages for select using (
+  auth.uid() in (select user_a from matches where id = match_id)
+  or auth.uid() in (select user_b from matches where id = match_id)
+);
+create policy "Send in own matches" on messages for insert with check (
+  auth.uid() in (select user_a from matches where id = match_id)
+  or auth.uid() in (select user_b from matches where id = match_id)
+);
+```
+
+### Auth Context
+Create a basic auth provider to track the session and user, and gate access to the room. Use `supabase.auth.onAuthStateChange` and load the profile into React context. 

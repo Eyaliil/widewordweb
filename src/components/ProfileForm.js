@@ -1,13 +1,146 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { INTERESTS, PRONOUNS } from '../data/constants';
 import { isStep1Valid } from '../utils/validation';
+import { supabase } from '../lib/supabaseClient';
 
-const Step1 = ({ me, setMe, onNext, onBack }) => {
+async function upsertProfile(me) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+  const payload = {
+    id: user.id,
+    name: me.name,
+    age: me.age || null,
+    pronouns: me.pronouns || null,
+    city: me.city || null,
+    bio: me.bio || null,
+  };
+  const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' });
+  if (error) throw error;
+}
+
+const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack }) => {
+  // Prefill form with existing profile from DB (once on mount)
+  useEffect(() => {
+    let mounted = true;
+    const loadProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('name, age, pronouns, city, bio')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (error || !data) return;
+        if (!mounted) return;
+        // Merge only missing fields so we don't overwrite in-progress edits
+        setMe(prev => ({
+          ...prev,
+          name: prev.name || data.name || '',
+          age: prev.age || data.age || '',
+          pronouns: prev.pronouns || data.pronouns || '',
+          city: prev.city || data.city || '',
+          bio: prev.bio || data.bio || '',
+        }));
+      } catch (_) {
+        // ignore
+      }
+    };
+    loadProfile();
+    return () => { mounted = false; };
+  }, [setMe]);
+
+  const handleNext = async () => {
+    try {
+      await upsertProfile(me);
+      onNext();
+    } catch (e) {
+      alert(e.message || 'Failed to save profile');
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file && file.size <= 5 * 1024 * 1024) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setAvatar({ type: 'image', image: ev.target.result, emoji: '', initials: '' });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    setAvatar({ type: 'emoji', image: null, emoji, initials: '' });
+  };
+
+  const handleInitialsChange = (initials) => {
+    setAvatar({ type: 'emoji', image: null, emoji: '', initials: initials.toUpperCase().slice(0, 2) });
+  };
+
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Tell us about yourself</h1>
       
       <div className="space-y-6">
+        {/* Avatar chooser merged here */}
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+          <input
+            type="file"
+            accept="image/jpg,image/jpeg,image/png"
+            onChange={handleImageUpload}
+            className="hidden"
+            id="image-upload"
+          />
+          <label htmlFor="image-upload" className="cursor-pointer">
+            <div className="space-y-2">
+              <div className="text-4xl">📷</div>
+              <div className="text-sm text-gray-600">Upload a photo (JPG/PNG, 5MB)</div>
+            </div>
+          </label>
+          {avatar?.type === 'image' && avatar?.image && (
+            <div className="mt-4">
+              <img src={avatar.image} alt="Preview" className="w-24 h-24 rounded-full mx-auto object-cover border-4 border-white shadow" />
+            </div>
+          )}
+        </div>
+
+        <div className="border border-gray-200 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-gray-700 mb-3 text-center">Or choose emoji/initials</h3>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {['💕','😊','🌟','🎭','🎨','🎵','🏃','📚','✈️','🍳'].map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => handleEmojiSelect(emoji)}
+                className={`w-10 h-10 text-xl rounded-full flex items-center justify-center ${
+                  avatar?.type === 'emoji' && avatar?.emoji === emoji ? 'bg-pink-500 text-white' : 'bg-gray-200 hover:bg-gray-300'
+                }`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3">
+            <label className="block text-xs text-gray-600 mb-1">Or use initials</label>
+            <input
+              type="text"
+              value={avatar?.initials || ''}
+              onChange={(e) => handleInitialsChange(e.target.value)}
+              maxLength={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-center text-xl font-bold"
+              placeholder="AB"
+            />
+          </div>
+          {(avatar?.type === 'emoji' && (avatar?.emoji || avatar?.initials)) && (
+            <div className="mt-3 text-center">
+              <div className="w-20 h-20 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full mx-auto flex items-center justify-center text-4xl border-4 border-white shadow">
+                {avatar.initials || avatar.emoji}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Profile fields */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
           <input
@@ -104,11 +237,11 @@ const Step1 = ({ me, setMe, onNext, onBack }) => {
           Back to Room
         </button>
         <button
-          onClick={onNext}
+          onClick={handleNext}
           disabled={!isStep1Valid(me)}
           className="px-8 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-600 transition-all duration-200"
         >
-          Next
+          Save
         </button>
       </div>
     </div>

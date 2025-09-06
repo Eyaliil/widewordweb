@@ -1,71 +1,142 @@
 import React, { useState, useEffect } from 'react';
-import { MOCK_USERS } from '../data/mockUsers';
+import { supabase } from '../lib/supabaseClient';
 import StickMan from './StickMan';
 
-const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatching, setIsMatching, match, setMatch, setMessages, setShowChat, onEditProfile }) => {
-  const [users] = useState(MOCK_USERS.slice(0, 20));
+const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatching, setIsMatching, match, setMatch, setMessages, setShowChat, onEditProfile, onEditPreferences }) => {
+  const [users, setUsers] = useState([]);
   const [showProfileNotice, setShowProfileNotice] = useState(false);
   const [stickMenPositions, setStickMenPositions] = useState([]);
+  const [noMatch, setNoMatch] = useState(false);
 
-  // Generate stick men positions only once when component mounts
+  // Load users from Supabase (profiles table)
   useEffect(() => {
+    let isCancelled = false;
+    const loadUsers = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, age, pronouns, bio')
+        .limit(20);
+      if (error) {
+        console.error('Failed to load users:', error);
+        return;
+      }
+      if (!isCancelled) setUsers(data || []);
+    };
+    loadUsers();
+    return () => { isCancelled = true; };
+  }, []);
+
+  // Generate stick men positions only once after users load
+  useEffect(() => {
+    if (!users || users.length === 0) return;
+    if (stickMenPositions.length > 0) return; // keep first assigned positions
     const positions = [];
     const usedPositions = [];
-    
-    users.slice(0, 8).forEach((user, index) => {
+    users.slice(0, 8).forEach((user) => {
       let attempts = 0;
       let x, y;
-      
-      // Try to find a non-overlapping position
       do {
-        x = 100 + Math.random() * 800; // Random x between 100 and 900
-        
-        // Calculate the dome curve height at this x position
-        const normalizedX = (x - 100) / 800; // 0 to 1
-        const domeCurveY = 200 - (normalizedX * (1 - normalizedX) * 270); // Y position on the dome curve
-        
-        // Random y position between the dome curve and the bottom (200)
-        const minY = domeCurveY - 50; // 50px below the dome curve
-        const maxY = 180; // 20px above the bottom
+        x = 100 + Math.random() * 800;
+        const normalizedX = (x - 100) / 800;
+        const domeCurveY = 200 - (normalizedX * (1 - normalizedX) * 270);
+        const minY = domeCurveY - 50;
+        const maxY = 180;
         y = minY + Math.random() * (maxY - minY);
-        
         attempts++;
-      } while (attempts < 50 && usedPositions.some(pos => 
-        Math.abs(pos.x - x) < 60 && Math.abs(pos.y - y) < 40
-      ));
-      
-      // Add this position to used positions
+      } while (attempts < 50 && usedPositions.some(pos => Math.abs(pos.x - x) < 60 && Math.abs(pos.y - y) < 40));
       usedPositions.push({ x, y });
       positions.push({ x, y, user });
     });
-    
     setStickMenPositions(positions);
-  }, []); // Empty dependency array means this runs only once
+  }, [users, stickMenPositions.length]);
+
+  // Check DB for profile completeness
+  const checkDbProfileComplete = async () => {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      if (!userId) return false;
+      const { data: profile, error: pErr } = await supabase
+        .from('profiles')
+        .select('id, name, age, pronouns, bio')
+        .eq('id', userId)
+        .maybeSingle();
+      if (pErr) return false;
+      const fieldsOk = !!(profile && profile.name && profile.age && profile.pronouns && profile.bio);
+      const { count, error: iErr } = await supabase
+        .from('user_interests')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      if (iErr) return false;
+      const interestsOk = (count ?? 0) > 0;
+      return fieldsOk && interestsOk;
+    } catch {
+      return false;
+    }
+  };
 
   // Go online and find match
-  const goOnline = () => {
+  const goOnline = async () => {
+    setNoMatch(false);
+    // If local flag says incomplete, double-check DB before prompting
     if (!isProfileComplete) {
-      setShowProfileNotice(true);
-      return;
+      const dbComplete = await checkDbProfileComplete();
+      if (!dbComplete) {
+        setShowProfileNotice(true);
+        return;
+      }
     }
-    
+
+    setShowProfileNotice(false);
     setIsOnline(true);
     setIsMatching(true);
     
-    // Simulate matching process
-    setTimeout(() => {
-      const myInterests = me.interests;
-      const potentialMatches = MOCK_USERS.filter(user => 
-        user.interests.some(interest => myInterests.includes(interest))
-      );
-      
-      if (potentialMatches.length > 0) {
-        const randomMatch = potentialMatches[Math.floor(Math.random() * potentialMatches.length)];
-        setMatch(randomMatch);
-        setMessages([
-          { id: 1, sender: 'them', text: `Hey ${me.name}! I noticed we both like ${randomMatch.interests.find(i => myInterests.includes(i))}!`, timestamp: new Date() },
-          { id: 2, sender: 'them', text: "How's your day going?", timestamp: new Date() }
-        ]);
+    // Matching process (RPC with fallback)
+    setTimeout(async () => {
+      let found = false;
+      try {
+        // Current user id to exclude from results
+        const { data: userData } = await supabase.auth.getUser();
+        const currentUserId = userData?.user?.id || null;
+
+        // Call secure RPC to find a match
+        const { data: rpcData, error: rpcError } = await supabase.rpc('find_match');
+        if (rpcError) throw rpcError;
+        const candidate = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+        if (candidate && candidate.id && candidate.id !== currentUserId) {
+          setMatch(candidate);
+          setMessages([
+            { id: 1, sender: 'them', text: `Hey ${me.name}!`, timestamp: new Date() },
+            { id: 2, sender: 'them', text: "How's your day going?", timestamp: new Date() }
+          ]);
+          found = true;
+        }
+      } catch (err) {
+        console.warn('RPC find_match failed or returned self; falling back:', err?.message || err);
+      }
+
+      if (!found) {
+        // Fallback: random from loaded users if RPC unavailable/empty
+        try {
+          const { data: userData } = await supabase.auth.getUser();
+          const currentUserId = userData?.user?.id || null;
+          const pool = (users && users.length ? users : []).filter(u => u.id !== currentUserId);
+          if (pool.length > 0) {
+            const randomMatch = pool[Math.floor(Math.random() * pool.length)];
+            setMatch(randomMatch);
+            setMessages([
+              { id: 1, sender: 'them', text: `Hey ${me.name}!`, timestamp: new Date() },
+              { id: 2, sender: 'them', text: "How's your day going?", timestamp: new Date() }
+            ]);
+            found = true;
+          }
+        } catch (_) {
+          // ignore
+        }
+      }
+
+      if (!found) {
+        setNoMatch(true);
       }
       setIsMatching(false);
     }, Math.random() * 3000 + 5000);
@@ -74,10 +145,6 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
   return (
     <div className="max-w-6xl mx-auto h-screen overflow-hidden">
       <h1 className="text-4xl font-bold text-center text-black mb-8">The Room</h1>
-      
-
-
-
       
       {/* Online Status - Between profile and globe */}
       {!isOnline ? (
@@ -88,9 +155,22 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
           >
             Go Online
           </button>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              onClick={onEditProfile}
+              className="px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300"
+            >
+              Edit Profile
+            </button>
+            <button
+              onClick={onEditPreferences}
+              className="px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300"
+            >
+              Edit Preferences
+            </button>
+          </div>
         </div>
         
-
       ) : isMatching ? (
         <div className="text-center mb-8">
           <div className="inline-flex items-center space-x-3 px-6 py-3 bg-gray-100 text-gray-700 rounded-full">
@@ -109,6 +189,12 @@ const TheRoom = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatch
           >
             Open Chat
           </button>
+        </div>
+      ) : noMatch ? (
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center space-x-3 px-6 py-3 bg-gray-100 text-gray-700 rounded-full">
+            <span className="font-medium">No match found right now. Please try again later.</span>
+          </div>
         </div>
       ) : null}
       
