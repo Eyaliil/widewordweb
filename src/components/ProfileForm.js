@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { INTERESTS, PRONOUNS } from '../data/constants';
 import { isStep1Valid } from '../utils/validation';
 import { supabase } from '../lib/supabaseClient';
@@ -18,44 +18,122 @@ async function upsertProfile(me) {
   if (error) throw error;
 }
 
-const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack }) => {
-  // Prefill form with existing profile from DB (once on mount)
+const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }) => {
+  const [originalInterests, setOriginalInterests] = useState(me.interests || []);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
+
+  // Prefill form with existing profile from DB (once on mount) and load user_interests (about me)
   useEffect(() => {
     let mounted = true;
-    const loadProfile = async () => {
+    const loadData = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data, error } = await supabase
+        const { data: profile } = await supabase
           .from('profiles')
           .select('name, age, pronouns, city, bio')
           .eq('id', user.id)
           .maybeSingle();
-        if (error || !data) return;
-        if (!mounted) return;
-        // Merge only missing fields so we don't overwrite in-progress edits
-        setMe(prev => ({
-          ...prev,
-          name: prev.name || data.name || '',
-          age: prev.age || data.age || '',
-          pronouns: prev.pronouns || data.pronouns || '',
-          city: prev.city || data.city || '',
-          bio: prev.bio || data.bio || '',
-        }));
-      } catch (_) {
-        // ignore
+        if (mounted && profile) {
+          // Merge only missing fields so we don't overwrite in-progress edits
+          setMe(prev => ({
+            ...prev,
+            name: prev.name || profile.name || '',
+            age: prev.age || profile.age || '',
+            pronouns: prev.pronouns || profile.pronouns || '',
+            city: prev.city || profile.city || '',
+            bio: prev.bio || profile.bio || '',
+          }));
+        }
+        // Load my interests from user_interests -> interests(label)
+        const { data: uiRows, error: uiErr } = await supabase
+          .from('user_interests')
+          .select('interest_id, interests(label)')
+          .eq('user_id', user.id);
+        if (uiErr) throw uiErr;
+        const labels = (uiRows || []).map(r => r.interests?.label).filter(Boolean);
+        if (mounted && labels) {
+          setOriginalInterests(labels);
+          setMe(prev => ({ ...prev, interests: prev.interests && prev.interests.length ? prev.interests : labels }));
+        }
+      } catch (e) {
+        if (mounted) setLoadError(e.message || 'Failed to load your profile');
       }
     };
-    loadProfile();
+    loadData();
     return () => { mounted = false; };
   }, [setMe]);
 
+  const interestsDirty = useMemo(() => {
+    const a = new Set(originalInterests);
+    const b = new Set(me.interests || []);
+    if (a.size !== b.size) return true;
+    for (const v of a) if (!b.has(v)) return true;
+    return false;
+  }, [originalInterests, me.interests]);
+
+  const saveMyInterests = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not signed in');
+    const selected = me.interests || [];
+    if (!selected.length) throw new Error('Please select at least one interest');
+
+    const toAddLabels = selected.filter(lbl => !originalInterests.includes(lbl));
+    const toRemoveLabels = originalInterests.filter(lbl => !selected.includes(lbl));
+
+    if (toAddLabels.length === 0 && toRemoveLabels.length === 0) return; // nothing to do
+
+    const allLabels = Array.from(new Set([...toAddLabels, ...toRemoveLabels]));
+    const { data: interestRows, error: selErr } = await supabase
+      .from('interests')
+      .select('id, label')
+      .in('label', allLabels);
+    if (selErr) throw selErr;
+    const labelToId = new Map((interestRows || []).map(r => [r.label, r.id]));
+
+    // Deletes
+    if (toRemoveLabels.length > 0) {
+      const removeIds = toRemoveLabels.map(lbl => labelToId.get(lbl)).filter(Boolean);
+      if (removeIds.length > 0) {
+        const { error: delErr } = await supabase
+          .from('user_interests')
+          .delete()
+          .eq('user_id', user.id)
+          .in('interest_id', removeIds);
+        if (delErr) throw delErr;
+      }
+    }
+
+    // Inserts
+    if (toAddLabels.length > 0) {
+      const addIds = toAddLabels.map(lbl => labelToId.get(lbl)).filter(Boolean);
+      if (addIds.length !== toAddLabels.length) {
+        const missing = toAddLabels.filter(lbl => !labelToId.get(lbl));
+        if (missing.length) throw new Error(`Interests not found in DB: ${missing.join(', ')}`);
+      }
+      if (addIds.length > 0) {
+        const rows = addIds.map(id => ({ user_id: user.id, interest_id: id }));
+        const { error: insErr } = await supabase
+          .from('user_interests')
+          .insert(rows);
+        if (insErr) throw insErr;
+      }
+    }
+    // Update originals
+    setOriginalInterests(selected);
+  };
+
   const handleNext = async () => {
+    setSaving(true);
     try {
+      await saveMyInterests();
       await upsertProfile(me);
       onNext();
     } catch (e) {
       alert(e.message || 'Failed to save profile');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -81,17 +159,14 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack }) => {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Tell us about yourself</h1>
+      {loadError && (
+        <div className="mb-4 px-4 py-2 rounded bg-red-50 text-red-700 text-sm">{loadError}</div>
+      )}
       
       <div className="space-y-6">
         {/* Avatar chooser merged here */}
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-          <input
-            type="file"
-            accept="image/jpg,image/jpeg,image/png"
-            onChange={handleImageUpload}
-            className="hidden"
-            id="image-upload"
-          />
+          <input type="file" accept="image/jpg,image/jpeg,image/png" onChange={handleImageUpload} className="hidden" id="image-upload" />
           <label htmlFor="image-upload" className="cursor-pointer">
             <div className="space-y-2">
               <div className="text-4xl">📷</div>
@@ -122,14 +197,7 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack }) => {
           </div>
           <div className="mt-3">
             <label className="block text-xs text-gray-600 mb-1">Or use initials</label>
-            <input
-              type="text"
-              value={avatar?.initials || ''}
-              onChange={(e) => handleInitialsChange(e.target.value)}
-              maxLength={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-center text-xl font-bold"
-              placeholder="AB"
-            />
+            <input type="text" value={avatar?.initials || ''} onChange={(e) => handleInitialsChange(e.target.value)} maxLength={2} className="w-full px-3 py-2 border border-gray-300 rounded text-center text-xl font-bold" placeholder="AB" />
           </div>
           {(avatar?.type === 'emoji' && (avatar?.emoji || avatar?.initials)) && (
             <div className="mt-3 text-center">
@@ -143,35 +211,17 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack }) => {
         {/* Profile fields */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
-          <input
-            type="text"
-            value={me.name}
-            onChange={(e) => setMe({...me, name: e.target.value})}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-            placeholder="Enter your name"
-          />
+          <input type="text" value={me.name} onChange={(e) => setMe({...me, name: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent" placeholder="Enter your name" />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Age *</label>
-          <input
-            type="number"
-            min="18"
-            max="99"
-            value={me.age}
-            onChange={(e) => setMe({...me, age: parseInt(e.target.value) || ''})}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-            placeholder="18-99"
-          />
+          <input type="number" min="18" max="99" value={me.age} onChange={(e) => setMe({...me, age: parseInt(e.target.value) || ''})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent" placeholder="18-99" />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Pronouns *</label>
-          <select
-            value={me.pronouns}
-            onChange={(e) => setMe({...me, pronouns: e.target.value})}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-          >
+          <select value={me.pronouns} onChange={(e) => setMe({...me, pronouns: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent">
             <option value="">Select pronouns</option>
             {PRONOUNS.map(pronoun => (
               <option key={pronoun} value={pronoun}>{pronoun}</option>
@@ -181,43 +231,28 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack }) => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">City (optional)</label>
-          <input
-            type="text"
-            value={me.city}
-            onChange={(e) => setMe({...me, city: e.target.value})}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-            placeholder="Enter your city"
-          />
+          <input type="text" value={me.city} onChange={(e) => setMe({...me, city: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent" placeholder="Enter your city" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Bio * ({me.bio.length}/200)
-          </label>
-          <textarea
-            value={me.bio}
-            onChange={(e) => setMe({...me, bio: e.target.value})}
-            maxLength={200}
-            rows={4}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-            placeholder="Tell us about yourself..."
-          />
+          <label className="block text-sm font-medium text-gray-700 mb-2">Bio * ({me.bio.length}/200)</label>
+          <textarea value={me.bio} onChange={(e) => setMe({...me, bio: e.target.value})} maxLength={200} rows={4} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent" placeholder="Tell us about yourself..." />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Interests *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">My Interests *</label>
           <div className="flex flex-wrap gap-2">
             {INTERESTS.map(interest => (
               <button
                 key={interest}
                 onClick={() => {
-                  const newInterests = me.interests.includes(interest)
-                    ? me.interests.filter(i => i !== interest)
-                    : [...me.interests, interest];
+                  const newInterests = (me.interests || []).includes(interest)
+                    ? (me.interests || []).filter(i => i !== interest)
+                    : ([...(me.interests || []), interest]);
                   setMe({...me, interests: newInterests});
                 }}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  me.interests.includes(interest)
+                  (me.interests || []).includes(interest)
                     ? 'bg-pink-500 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
@@ -230,18 +265,15 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack }) => {
       </div>
 
       <div className="mt-8 flex justify-between">
-        <button
-          onClick={onBack}
-          className="px-8 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors duration-200"
-        >
-          Back to Room
-        </button>
+        {showBack && (
+          <button onClick={onBack} className="px-8 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors duration-200">Back to Room</button>
+        )}
         <button
           onClick={handleNext}
-          disabled={!isStep1Valid(me)}
+          disabled={!isStep1Valid(me) || saving}
           className="px-8 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-600 transition-all duration-200"
         >
-          Save
+          {saving ? 'Saving...' : 'Save'}
         </button>
       </div>
     </div>
