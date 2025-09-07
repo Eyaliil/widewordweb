@@ -1,5 +1,5 @@
 // Available interests
-export const INTERESTS = ["Travel", "Photography", "Music", "Cooking", "Gaming", "Art", "Fitness", "Reading", "Dance"];
+export const INTERESTS = ["Music", "Movies", "Sports", "Tech", "Travel", "Books", "Dance","Cooking", "Gaming"];
 
 // Pronouns options
 export const PRONOUNS = ["She/Her", "He/Him", "They/Them", "She/They", "He/They", "Any/All"];
