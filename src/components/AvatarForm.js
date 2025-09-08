@@ -1,7 +1,7 @@
 import React from 'react';
-import { isStep2Valid } from '../utils/validation';
+import { isAvatarValid } from '../utils/validation';
 
-const Step2 = ({ avatar, setAvatar, onNext, onBack }) => {
+const AvatarForm = ({ avatar, setAvatar, onNext, onBack }) => {
   // Handle file upload
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -130,7 +130,7 @@ const Step2 = ({ avatar, setAvatar, onNext, onBack }) => {
         </button>
         <button
           onClick={onNext}
-          disabled={!isStep2Valid(avatar)}
+          disabled={!isAvatarValid(avatar)}
           className="px-8 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-600 transition-all duration-200"
         >
           Next
@@ -140,4 +140,4 @@ const Step2 = ({ avatar, setAvatar, onNext, onBack }) => {
   );
 };
 
-export default Step2; 
+export default AvatarForm; 

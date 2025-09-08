@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { INTERESTS, PRONOUNS } from '../data/constants';
-import { isStep1Valid } from '../utils/validation';
+import { getInterests, getPronouns } from '../services/lookupService';
+import { isProfileValid } from '../utils/validation';
 import { supabase } from '../lib/supabaseClient';
 
 async function upsertProfile(me) {
@@ -18,8 +18,10 @@ async function upsertProfile(me) {
   if (error) throw error;
 }
 
-const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }) => {
+const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }) => {
   const [originalInterests, setOriginalInterests] = useState(me.interests || []);
+  const [interestOptions, setInterestOptions] = useState([]);
+  const [pronounOptions, setPronounOptions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
 
@@ -28,6 +30,12 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }
     let mounted = true;
     const loadData = async () => {
       try {
+        // load lookup options
+        const [interests, pronouns] = await Promise.all([getInterests(), getPronouns()]);
+        if (mounted) {
+          setInterestOptions(interests);
+          setPronounOptions(pronouns);
+        }
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const { data: profile } = await supabase
@@ -223,7 +231,7 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }
           <label className="block text-sm font-medium text-gray-700 mb-2">Pronouns *</label>
           <select value={me.pronouns} onChange={(e) => setMe({...me, pronouns: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent">
             <option value="">Select pronouns</option>
-            {PRONOUNS.map(pronoun => (
+            {pronounOptions.map(pronoun => (
               <option key={pronoun} value={pronoun}>{pronoun}</option>
             ))}
           </select>
@@ -242,7 +250,7 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">My Interests *</label>
           <div className="flex flex-wrap gap-2">
-            {INTERESTS.map(interest => (
+            {interestOptions.map(interest => (
               <button
                 key={interest}
                 onClick={() => {
@@ -260,6 +268,9 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }
                 {interest}
               </button>
             ))}
+            {interestOptions.length === 0 && (
+              <span className="text-sm text-gray-500">No interests available. Seed the interests table.</span>
+            )}
           </div>
         </div>
       </div>
@@ -270,7 +281,7 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }
         )}
         <button
           onClick={handleNext}
-          disabled={!isStep1Valid(me) || saving}
+          disabled={!isProfileValid(me) || saving}
           className="px-8 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-600 transition-all duration-200"
         >
           {saving ? 'Saving...' : 'Save'}
@@ -280,4 +291,4 @@ const Step1 = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }
   );
 };
 
-export default Step1; 
+export default ProfileFormInternal; 

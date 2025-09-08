@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ProfileForm from './components/ProfileForm';
 import PreferencesForm from './components/PreferencesForm';
-import TheRoom from './components/TheRoom';
+import Home from './components/Home';
 import ChatModal from './components/ChatModal';
-import Header from './components/Header';
 import { useAuth } from './context/AuthContext';
 import { supabase } from './lib/supabaseClient';
 
@@ -57,7 +56,7 @@ function App() {
     ensureProfileThenRoute();
   }, [user]);
 
-  const goToStep = (step) => setCurrentView(step);
+
   const goToRoom = () => setCurrentView('room');
 
   const returnToRoomFromProfile = () => {
@@ -100,7 +99,7 @@ function App() {
       case 'room':
       default:
         return (
-          <TheRoom
+          <Home
             me={me}
             avatar={avatar}
             isProfileComplete={isProfileComplete()}
@@ -119,11 +118,8 @@ function App() {
     }
   };
 
-  const showHeader = false;
-
   return (
     <div className="min-h-screen bg-white">
-      {showHeader && <Header currentView={currentView} />}      
       <div className="container mx-auto px-4 py-8">
         {renderCurrentView()}
       </div>

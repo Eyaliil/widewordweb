@@ -1,5 +1,5 @@
 // Validation functions
-export const isStep1Valid = (me) => {
+export const isProfileValid = (me) => {
   return me.name.trim() && 
          me.age >= 18 && me.age <= 99 && 
          me.pronouns && 
@@ -7,11 +7,11 @@ export const isStep1Valid = (me) => {
          me.interests.length > 0;
 };
 
-export const isStep2Valid = (avatar) => {
+export const isAvatarValid = (avatar) => {
   return avatar.type && ((avatar.type === 'image' && avatar.image) || (avatar.type === 'emoji' && avatar.emoji));
 };
 
-export const isStep3Valid = (lookingFor) => {
+export const isPreferencesValid = (lookingFor) => {
   return lookingFor.genders.length > 0 && 
          lookingFor.interests.length > 0 && 
          lookingFor.vibe;

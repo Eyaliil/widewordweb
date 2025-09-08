@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { getInterests, getGenders, getRelationshipTypes } from '../services/lookupService';
  
  const PreferencesForm = ({ me, avatar, lookingFor, setLookingFor, onNext, onBack }) => {
    // Interests (searched)
@@ -14,39 +15,36 @@ import { supabase } from '../lib/supabaseClient';
      ageMax: 35,
      distanceKm: 50,
      relationshipTypes: [],
-     smokingPref: '', // 'yes' | 'no' | 'sometimes' | ''
-     drinkingPref: '',
-     languages: [],
      vibe: ''
    });
    const [originalProfile, setOriginalProfile] = useState(profilePrefs);
-
+ 
+   const [genderOptions, setGenderOptions] = useState([]);
+   const [relationshipOptions, setRelationshipOptions] = useState([]);
+   
+ 
    const [loading, setLoading] = useState(true);
    const [errorMsg, setErrorMsg] = useState('');
    const [saving, setSaving] = useState(false);
-
-   const GENDER_OPTIONS = ['woman', 'man', 'non-binary', 'other'];
-   const RELATIONSHIP_OPTIONS = ['serious', 'casual', 'friendship'];
-   const SMOKING_OPTIONS = ['yes', 'no', 'sometimes'];
-   const DRINKING_OPTIONS = ['yes', 'no', 'sometimes'];
-   const LANGUAGE_OPTIONS = ['English', 'French', 'German', 'Spanish', 'Arabic'];
  
    useEffect(() => {
      let mounted = true;
      const loadData = async () => {
        try {
-         // Load available interests from DB
-         const { data: optRows, error: optErr } = await supabase
-           .from('interests')
-           .select('label')
-           .order('label', { ascending: true });
-         if (optErr) throw optErr;
-         const opts = (optRows || []).map(r => r.label);
-         if (mounted) setInterestOptions(opts);
-
+         const [interests, genders, relTypes] = await Promise.all([
+           getInterests(),
+           getGenders(),
+           getRelationshipTypes()
+         ]);
+         if (mounted) {
+           setInterestOptions(interests);
+           setGenderOptions(genders);
+           setRelationshipOptions(relTypes);
+         }
+ 
          const { data: { user } } = await supabase.auth.getUser();
          if (!user) { setLoading(false); return; }
-
+ 
          // LOAD searched interests
          const { data: siRows, error: siErr } = await supabase
            .from('user_search_interests')
@@ -58,11 +56,11 @@ import { supabase } from '../lib/supabaseClient';
            setSelectedInterests(labels);
            setOriginalInterests(labels);
          }
-
+ 
          // LOAD searched profile
          const { data: spRow, error: spErr } = await supabase
            .from('user_search_profile')
-           .select('genders, age_min, age_max, distance_km, relationship_types, smoking_pref, drinking_pref, languages, vibe')
+           .select('genders, age_min, age_max, distance_km, relationship_types, vibe')
            .eq('user_id', user.id)
            .maybeSingle();
          if (spErr) throw spErr;
@@ -72,9 +70,6 @@ import { supabase } from '../lib/supabaseClient';
            ageMax: spRow.age_max ?? 35,
            distanceKm: spRow.distance_km ?? 50,
            relationshipTypes: spRow.relationship_types || [],
-           smokingPref: spRow.smoking_pref || '',
-           drinkingPref: spRow.drinking_pref || '',
-           languages: spRow.languages || [],
            vibe: spRow.vibe || ''
          } : { ...profilePrefs };
          if (mounted) {
@@ -91,7 +86,7 @@ import { supabase } from '../lib/supabaseClient';
      loadData();
      return () => { mounted = false; };
    }, []);
-
+ 
    const arraysEqual = (a, b) => {
      if (!Array.isArray(a) || !Array.isArray(b)) return false;
      if (a.length !== b.length) return false;
@@ -99,19 +94,16 @@ import { supabase } from '../lib/supabaseClient';
      const bs = [...b].sort();
      return as.every((v, i) => v === bs[i]);
    };
-
+ 
    const profileDirty = useMemo(() => {
      return !arraysEqual(profilePrefs.genders, originalProfile.genders)
        || profilePrefs.ageMin !== originalProfile.ageMin
        || profilePrefs.ageMax !== originalProfile.ageMax
        || profilePrefs.distanceKm !== originalProfile.distanceKm
        || !arraysEqual(profilePrefs.relationshipTypes, originalProfile.relationshipTypes)
-       || profilePrefs.smokingPref !== originalProfile.smokingPref
-       || profilePrefs.drinkingPref !== originalProfile.drinkingPref
-       || !arraysEqual(profilePrefs.languages, originalProfile.languages)
        || profilePrefs.vibe !== originalProfile.vibe;
    }, [profilePrefs, originalProfile]);
-
+ 
    const interestsDirty = useMemo(() => {
      const a = new Set(originalInterests);
      const b = new Set(selectedInterests);
@@ -119,9 +111,9 @@ import { supabase } from '../lib/supabaseClient';
      for (const v of a) if (!b.has(v)) return true;
      return false;
    }, [originalInterests, selectedInterests]);
-
+ 
    const isDirty = profileDirty || interestsDirty;
-
+ 
    const toggleValue = (key, value) => {
      setProfilePrefs(prev => {
        const current = prev[key];
@@ -131,7 +123,7 @@ import { supabase } from '../lib/supabaseClient';
        return { ...prev, [key]: next };
      });
    };
-
+ 
    const saveInterests = async () => {
      const { data: { user } } = await supabase.auth.getUser();
      if (!user) throw new Error('Not signed in');
@@ -172,7 +164,7 @@ import { supabase } from '../lib/supabaseClient';
      }
      setOriginalInterests(selectedInterests);
    };
-
+ 
    const saveProfilePrefs = async () => {
      const { data: { user } } = await supabase.auth.getUser();
      if (!user) throw new Error('Not signed in');
@@ -183,16 +175,13 @@ import { supabase } from '../lib/supabaseClient';
        age_max: profilePrefs.ageMax,
        distance_km: profilePrefs.distanceKm,
        relationship_types: profilePrefs.relationshipTypes,
-       smoking_pref: profilePrefs.smokingPref || null,
-       drinking_pref: profilePrefs.drinkingPref || null,
-       languages: profilePrefs.languages,
        vibe: profilePrefs.vibe || null
      };
      const { error } = await supabase.from('user_search_profile').upsert(payload, { onConflict: 'user_id' });
      if (error) throw error;
      setOriginalProfile({ ...profilePrefs });
    };
- 
+  
    const handleNext = async () => {
      setSaving(true);
      setErrorMsg('');
@@ -206,7 +195,7 @@ import { supabase } from '../lib/supabaseClient';
        setSaving(false);
      }
    };
-
+ 
    if (loading) {
      return (
        <div className="max-w-2xl mx-auto">
@@ -214,91 +203,59 @@ import { supabase } from '../lib/supabaseClient';
        </div>
      );
    }
-
-   return (
+ 
+  return (
      <div className="max-w-2xl mx-auto">
        <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Who I'm looking for</h1>
        {errorMsg && (
          <div className="mb-4 px-4 py-2 rounded bg-red-50 text-red-700 text-sm">{errorMsg}</div>
        )}
-
+ 
        <div className="space-y-6">
-         <div>
+          <div>
            <label className="block text-sm font-medium text-gray-700 mb-2">Genders</label>
-           <div className="flex flex-wrap gap-2">
-             {GENDER_OPTIONS.map(opt => (
-               <button
+            <div className="flex flex-wrap gap-2">
+             {genderOptions.map(opt => (
+                <button
                  key={opt}
                  onClick={() => toggleValue('genders', opt)}
                  className={`px-3 py-1 rounded-full text-sm ${profilePrefs.genders.includes(opt) ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                >{opt}</button>
-             ))}
-           </div>
-         </div>
-
+              ))}
+            </div>
+          </div>
+ 
          <div className="grid grid-cols-2 gap-4">
            <div>
              <label className="block text-sm font-medium text-gray-700 mb-2">Age min</label>
              <input type="number" min="18" max="99" value={profilePrefs.ageMin} onChange={e => setProfilePrefs(p => ({ ...p, ageMin: parseInt(e.target.value)||18 }))} className="w-full px-3 py-2 border rounded" />
            </div>
-           <div>
+          <div>
              <label className="block text-sm font-medium text-gray-700 mb-2">Age max</label>
              <input type="number" min={profilePrefs.ageMin} max="99" value={profilePrefs.ageMax} onChange={e => setProfilePrefs(p => ({ ...p, ageMax: parseInt(e.target.value)||p.ageMin }))} className="w-full px-3 py-2 border rounded" />
-           </div>
-         </div>
-
-         <div>
+            </div>
+          </div>
+ 
+          <div>
            <label className="block text-sm font-medium text-gray-700 mb-2">Max distance (km)</label>
            <input type="number" min="0" value={profilePrefs.distanceKm} onChange={e => setProfilePrefs(p => ({ ...p, distanceKm: Math.max(0, parseInt(e.target.value)||0) }))} className="w-full px-3 py-2 border rounded" />
          </div>
-
+ 
          <div>
            <label className="block text-sm font-medium text-gray-700 mb-2">Relationship type</label>
-           <div className="flex flex-wrap gap-2">
-             {RELATIONSHIP_OPTIONS.map(opt => (
+            <div className="flex flex-wrap gap-2">
+             {relationshipOptions.map(opt => (
                <button key={opt} onClick={() => toggleValue('relationshipTypes', opt)} className={`px-3 py-1 rounded-full text-sm ${profilePrefs.relationshipTypes.includes(opt) ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{opt}</button>
-             ))}
-           </div>
-         </div>
-
-         <div className="grid grid-cols-2 gap-4">
-           <div>
-             <label className="block text-sm font-medium text-gray-700 mb-2">Smoking</label>
-             <div className="flex gap-2">
-               {SMOKING_OPTIONS.map(opt => (
-                 <label key={opt} className="flex items-center gap-1 text-sm text-gray-700">
-                   <input type="radio" name="smoking" checked={profilePrefs.smokingPref === opt} onChange={() => setProfilePrefs(p => ({ ...p, smokingPref: opt }))} /> {opt}
-                 </label>
-               ))}
-             </div>
-           </div>
-           <div>
-             <label className="block text-sm font-medium text-gray-700 mb-2">Drinking</label>
-             <div className="flex gap-2">
-               {DRINKING_OPTIONS.map(opt => (
-                 <label key={opt} className="flex items-center gap-1 text-sm text-gray-700">
-                   <input type="radio" name="drinking" checked={profilePrefs.drinkingPref === opt} onChange={() => setProfilePrefs(p => ({ ...p, drinkingPref: opt }))} /> {opt}
-                 </label>
-               ))}
-             </div>
-           </div>
-         </div>
-
-         <div>
-           <label className="block text-sm font-medium text-gray-700 mb-2">Languages</label>
-           <div className="flex flex-wrap gap-2">
-             {LANGUAGE_OPTIONS.map(opt => (
-               <button key={opt} onClick={() => toggleValue('languages', opt)} className={`px-3 py-1 rounded-full text-sm ${profilePrefs.languages.includes(opt) ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{opt}</button>
-             ))}
-           </div>
-         </div>
-
-         <div>
+              ))}
+            </div>
+          </div>
+ 
+          <div>
            <label className="block text-sm font-medium text-gray-700 mb-2">Vibe</label>
            <textarea value={profilePrefs.vibe} onChange={e => setProfilePrefs(p => ({ ...p, vibe: e.target.value }))} rows={3} className="w-full px-3 py-2 border rounded" placeholder="Describe the vibe you're looking for..." />
-         </div>
-
-         <div>
+          </div>
+          
+          <div>
            <label className="block text-sm font-medium text-gray-700 mb-2">Interests *</label>
            <div className="flex flex-wrap gap-2">
              {interestOptions.map(interest => (
@@ -311,19 +268,19 @@ import { supabase } from '../lib/supabaseClient';
                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                  }`}
                >
-                 {interest}
+                      {interest}
                </button>
              ))}
              {interestOptions.length === 0 && (
                <span className="text-sm text-gray-500">No interests available. Seed the interests table.</span>
              )}
-           </div>
-         </div>
-       </div>
-
-       <div className="mt-8 flex justify-between">
+          </div>
+        </div>
+      </div>
+ 
+      <div className="mt-8 flex justify-between">
          <button onClick={onBack} className="px-8 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors duration-200">Back</button>
-         <button
+        <button
            onClick={async () => { await handleNext(); }}
            disabled={!isDirty || saving}
            className={`px-8 py-3 rounded-lg font-semibold transition-colors duration-200 ${
@@ -333,10 +290,10 @@ import { supabase } from '../lib/supabaseClient';
            }`}
          >
            {saving ? 'Saving...' : 'Save'}
-         </button>
-       </div>
-     </div>
-   );
- };
+        </button>
+      </div>
+    </div>
+  );
+};
  
  export default PreferencesForm; 

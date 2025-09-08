@@ -27,20 +27,17 @@ A modern, well-structured dating app built with React and Tailwind CSS, featurin
 widewordweb/
 ├── src/
 │   ├── components/          # Reusable UI components
-│   │   ├── Header.js       # App header with progress bar
-│   │   ├── Step1.js        # About You form
-│   │   ├── Step2.js        # Avatar selection
-│   │   ├── Step3.js        # Looking For preferences
-│   │   ├── Step4.js        # The Room matching
-│   │   └── ChatModal.js    # Chat interface
+│   │   ├── Home.js          # Main screen (formerly TheRoom)
+│   │   ├── ProfileForm.js   # Profile (About You + Avatar)
+│   │   ├── PreferencesForm.js # Preferences (Looking For)
+│   │   └── ChatModal.js     # Chat interface
 │   ├── data/               # Static data and constants
-│   │   ├── constants.js    # App constants (interests, pronouns, etc.)
-│   │   └── mockUsers.js    # Mock user data
+│   │   └── constants.js    # App constants (interests, pronouns, etc.)
 │   ├── hooks/              # Custom React hooks
 │   │   └── useLocalStorage.js # Local storage management
 │   ├── utils/              # Helper functions
 │   │   └── validation.js   # Form validation logic
-│   ├── App.js              # Main app component (160 lines vs 829 original)
+│   ├── App.js              # Main app component
 │   ├── index.js            # React entry point
 │   └── index.css           # Tailwind CSS imports
 ├── public/
