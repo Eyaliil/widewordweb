@@ -2,7 +2,7 @@
 export const isProfileValid = (me) => {
   return me.name.trim() && 
          me.age >= 18 && me.age <= 99 && 
-         me.pronouns && 
+         me.gender &&
          me.bio.trim() && me.bio.length <= 200 && 
          me.interests.length > 0;
 };

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { getInterests, getGenders, getRelationshipTypes } from '../services/lookupService';
+import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../services/lookupService';
  
  const PreferencesForm = ({ me, avatar, lookingFor, setLookingFor, onNext, onBack }) => {
    // Interests (searched)
@@ -21,6 +21,7 @@ import { getInterests, getGenders, getRelationshipTypes } from '../services/look
  
    const [genderOptions, setGenderOptions] = useState([]);
    const [relationshipOptions, setRelationshipOptions] = useState([]);
+   const [vibeOptions, setVibeOptions] = useState([]);
    
  
    const [loading, setLoading] = useState(true);
@@ -31,15 +32,17 @@ import { getInterests, getGenders, getRelationshipTypes } from '../services/look
      let mounted = true;
      const loadData = async () => {
        try {
-         const [interests, genders, relTypes] = await Promise.all([
+         const [interests, genders, relTypes, vibes] = await Promise.all([
            getInterests(),
            getGenders(),
-           getRelationshipTypes()
+           getRelationshipTypes(),
+           getVibes()
          ]);
          if (mounted) {
            setInterestOptions(interests);
            setGenderOptions(genders);
            setRelationshipOptions(relTypes);
+           setVibeOptions(vibes);
          }
  
          const { data: { user } } = await supabase.auth.getUser();
@@ -206,6 +209,28 @@ import { getInterests, getGenders, getRelationshipTypes } from '../services/look
  
   return (
      <div className="max-w-2xl mx-auto">
+      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+        <div className="py-3 flex items-center justify-between">
+          <div>
+            <button onClick={onBack} aria-label="Back" className="px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100">
+              <span className="text-xl">←</span>
+            </button>
+          </div>
+          <div>
+            <button
+              onClick={async () => { await handleNext(); }}
+              disabled={!isDirty || saving}
+              className={`px-6 py-2 rounded-lg font-semibold transition-colors duration-200 ${
+                (!isDirty || saving)
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600'
+              }`}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
        <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Who I'm looking for</h1>
        {errorMsg && (
          <div className="mb-4 px-4 py-2 rounded bg-red-50 text-red-700 text-sm">{errorMsg}</div>
@@ -250,49 +275,45 @@ import { getInterests, getGenders, getRelationshipTypes } from '../services/look
             </div>
           </div>
  
-          <div>
-           <label className="block text-sm font-medium text-gray-700 mb-2">Vibe</label>
-           <textarea value={profilePrefs.vibe} onChange={e => setProfilePrefs(p => ({ ...p, vibe: e.target.value }))} rows={3} className="w-full px-3 py-2 border rounded" placeholder="Describe the vibe you're looking for..." />
+         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Vibe</label>
+          <div className="flex flex-wrap gap-2">
+            {vibeOptions.map(opt => (
+              <button
+                key={opt}
+                onClick={() => setProfilePrefs(p => ({ ...p, vibe: p.vibe === opt ? '' : opt }))}
+                className={`px-3 py-1 rounded-full text-sm ${profilePrefs.vibe === opt ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              >{opt}</button>
+            ))}
+            {vibeOptions.length === 0 && (
+              <span className="text-sm text-gray-500">No vibes available. Seed the vibes table.</span>
+            )}
           </div>
+         </div>
           
-          <div>
-           <label className="block text-sm font-medium text-gray-700 mb-2">Interests *</label>
-           <div className="flex flex-wrap gap-2">
-             {interestOptions.map(interest => (
-               <button
-                 key={interest}
-                 onClick={() => setSelectedInterests(prev => (prev.includes(interest) ? prev.filter(i => i !== interest) : [...prev, interest]))}
-                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                   selectedInterests.includes(interest)
-                     ? 'bg-pink-500 text-white'
-                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                 }`}
-               >
-                      {interest}
-               </button>
-             ))}
-             {interestOptions.length === 0 && (
-               <span className="text-sm text-gray-500">No interests available. Seed the interests table.</span>
-             )}
-          </div>
-        </div>
-      </div>
- 
-      <div className="mt-8 flex justify-between">
-         <button onClick={onBack} className="px-8 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors duration-200">Back</button>
-        <button
-           onClick={async () => { await handleNext(); }}
-           disabled={!isDirty || saving}
-           className={`px-8 py-3 rounded-lg font-semibold transition-colors duration-200 ${
-             (!isDirty || saving)
-               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-               : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600'
-           }`}
-         >
-           {saving ? 'Saving...' : 'Save'}
-        </button>
-      </div>
-    </div>
+         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Interests *</label>
+          <div className="flex flex-wrap gap-2">
+            {interestOptions.map(interest => (
+              <button
+                key={interest}
+                onClick={() => setSelectedInterests(prev => (prev.includes(interest) ? prev.filter(i => i !== interest) : [...prev, interest]))}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  selectedInterests.includes(interest)
+                    ? 'bg-pink-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                     {interest}
+              </button>
+            ))}
+            {interestOptions.length === 0 && (
+              <span className="text-sm text-gray-500">No interests available. Seed the interests table.</span>
+            )}
+         </div>
+       </div>
+     </div>
+   </div>
   );
 };
  

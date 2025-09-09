@@ -2,28 +2,25 @@ import React, { useState, useEffect } from 'react';
 import ProfileForm from './components/ProfileForm';
 import PreferencesForm from './components/PreferencesForm';
 import Home from './components/Home';
-import ChatModal from './components/ChatModal';
+// Chat removed
 import { useAuth } from './context/AuthContext';
 import { supabase } from './lib/supabaseClient';
 
 function App() {
   const { user } = useAuth();
   const [currentView, setCurrentView] = useState('room');
-  const [me, setMe] = useState({ name: '', age: '', pronouns: '', city: '', bio: '', interests: [] });
+  const [me, setMe] = useState({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '', interests: [] });
   const [avatar, setAvatar] = useState({ type: '', image: null, emoji: '💕', initials: '' });
   const [lookingFor, setLookingFor] = useState({ genders: [], ageRange: [25, 35], interests: [], distance: 50, vibe: '', dealBreakers: [] });
   const [isOnline, setIsOnline] = useState(false);
-  const [match, setMatch] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [isMatching, setIsMatching] = useState(false);
-  const [showChat, setShowChat] = useState(false);
+  // Matching and chat removed
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showBackOnProfile, setShowBackOnProfile] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
   const [profileCompleteDb, setProfileCompleteDb] = useState(false);
 
   const isProfileComplete = () => {
-    return me.name && me.age && me.pronouns && me.bio && me.interests.length > 0 &&
+    return me.name && me.age && me.gender && me.bio && me.interests.length > 0 &&
            avatar.type && (avatar.image || avatar.emoji || avatar.initials) &&
            lookingFor.genders.length > 0 && lookingFor.interests.length > 0 && lookingFor.vibe;
   };
@@ -34,10 +31,10 @@ function App() {
       try {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('name, age, pronouns, bio')
+          .select('name, age, gender, bio')
           .eq('id', user.id)
           .maybeSingle();
-        const fieldsOk = !!(profile && profile.name && profile.age && profile.pronouns && profile.bio);
+        const fieldsOk = !!(profile && profile.name && profile.age && profile.gender && profile.bio);
         const { count } = await supabase
           .from('user_interests')
           .select('*', { count: 'exact', head: true })
@@ -64,12 +61,7 @@ function App() {
     setCurrentView('room');
   };
 
-  const leaveChat = () => {
-    setShowChat(false);
-    setMatch(null);
-    setMessages([]);
-    setIsOnline(false);
-  };
+  // leaveChat removed
 
   const renderCurrentView = () => {
     switch (currentView) {
@@ -105,12 +97,6 @@ function App() {
             isProfileComplete={isProfileComplete()}
             isOnline={isOnline}
             setIsOnline={setIsOnline}
-            isMatching={isMatching}
-            setIsMatching={setIsMatching}
-            match={match}
-            setMatch={setMatch}
-            setMessages={setMessages}
-            setShowChat={setShowChat}
             onEditProfile={() => { if (profileCompleteDb || isProfileComplete()) { setIsEditingProfile(true); setShowBackOnProfile(true); setCurrentView('profile'); } }}
             onEditPreferences={() => { if (profileCompleteDb || isProfileComplete()) { setCurrentView('preferences'); } }}
           />
@@ -124,15 +110,7 @@ function App() {
         {renderCurrentView()}
       </div>
 
-      {showChat && match && (
-        <ChatModal
-          match={match}
-          messages={messages}
-          setMessages={setMessages}
-          onClose={() => setShowChat(false)}
-          onLeaveChat={leaveChat}
-        />
-      )}
+      {/* Chat removed */}
     </div>
   );
 }

@@ -3,12 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import AuthPanel from './AuthPanel';
 import { supabase } from '../lib/supabaseClient';
 import { loadPublicProfiles } from '../services/profileService';
-import { findMatchRPC, getCurrentUserId, pickRandomExcluding } from '../services/matchingService';
 
-const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatching, setIsMatching, match, setMatch, setMessages, setShowChat, onEditProfile, onEditPreferences }) => {
+const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProfile, onEditPreferences }) => {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
-  const [noMatch, setNoMatch] = useState(false);
 
   // Load users via RPC (public_profiles)
   useEffect(() => {
@@ -31,47 +29,11 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatching
   };
 
   const goOnline = async () => {
-    setNoMatch(false);
     if (!(await checkDbProfileComplete())) {
       return;
     }
 
     setIsOnline(true);
-    setIsMatching(true);
-
-    setTimeout(async () => {
-      let found = false;
-      try {
-        const currentUserId = await getCurrentUserId();
-        const candidate = await findMatchRPC();
-        if (candidate && candidate.id && candidate.id !== currentUserId) {
-          setMatch(candidate);
-          setMessages([
-            { id: 1, sender: 'them', text: `Hey ${me.name}!`, timestamp: new Date() },
-            { id: 2, sender: 'them', text: "How's your day going?", timestamp: new Date() }
-          ]);
-          found = true;
-        }
-      } catch (err) {
-        console.warn('RPC find_match failed; falling back:', err?.message || err);
-      }
-
-      if (!found) {
-        const currentUserId = await getCurrentUserId();
-        const fallback = pickRandomExcluding(users, currentUserId);
-        if (fallback) {
-          setMatch(fallback);
-          setMessages([
-            { id: 1, sender: 'them', text: `Hey ${me.name}!`, timestamp: new Date() },
-            { id: 2, sender: 'them', text: "How's your day going?", timestamp: new Date() }
-          ]);
-          found = true;
-        }
-      }
-
-      if (!found) setNoMatch(true);
-      setIsMatching(false);
-    }, Math.random() * 3000 + 5000);
   };
 
   return (
@@ -122,36 +84,13 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, isMatching
       {/* Primary action and status */}
       <div className="text-center mb-10">
         {!isOnline ? (
-          <>
-            <button
-              onClick={goOnline}
-              className="px-8 py-4 font-semibold rounded-xl text-lg transition-all duration-200 shadow-lg bg-black text-white hover:bg-gray-800"
-            >
-              Go Online
-            </button>
-            {noMatch && (
-              <div className="mt-4 text-sm text-gray-600">No match found right now. Please try again later.</div>
-            )}
-          </>
-        ) : isMatching ? (
-          <div className="inline-flex items-center space-x-3 px-6 py-3 bg-gray-100 text-gray-700 rounded-full">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
-            <span className="font-medium">Matching...</span>
-          </div>
-        ) : match ? (
-          <div className="space-x-2">
-            <span className="inline-flex items-center space-x-3 px-6 py-3 bg-gray-100 text-gray-700 rounded-full">
-              <span className="font-medium">Matched!</span>
-            </span>
-            <button onClick={() => setShowChat(true)} className="px-6 py-2 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition-colors duration-200">Open Chat</button>
-          </div>
-        ) : (
-          noMatch && (
-            <div className="inline-flex items-center space-x-3 px-6 py-3 bg-gray-100 text-gray-700 rounded-full">
-              <span className="font-medium">No match found right now. Please try again later.</span>
-            </div>
-          )
-        )}
+          <button
+            onClick={goOnline}
+            className="px-8 py-4 font-semibold rounded-xl text-lg transition-all duration-200 shadow-lg bg-black text-white hover:bg-gray-800"
+          >
+            Go Online
+          </button>
+        ) : null}
       </div>
     </div>
   );

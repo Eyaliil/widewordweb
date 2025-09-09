@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { getInterests, getPronouns } from '../services/lookupService';
+import { getInterests, getPronouns, getGenders } from '../services/lookupService';
 import { isProfileValid } from '../utils/validation';
 import { supabase } from '../lib/supabaseClient';
 
@@ -10,6 +10,7 @@ async function upsertProfile(me) {
     id: user.id,
     name: me.name,
     age: me.age || null,
+    gender: me.gender || null,
     pronouns: me.pronouns || null,
     city: me.city || null,
     bio: me.bio || null,
@@ -22,8 +23,10 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
   const [originalInterests, setOriginalInterests] = useState(me.interests || []);
   const [interestOptions, setInterestOptions] = useState([]);
   const [pronounOptions, setPronounOptions] = useState([]);
+  const [genderOptions, setGenderOptions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [originalProfile, setOriginalProfile] = useState({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '' });
 
   // Prefill form with existing profile from DB (once on mount) and load user_interests (about me)
   useEffect(() => {
@@ -31,16 +34,17 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
     const loadData = async () => {
       try {
         // load lookup options
-        const [interests, pronouns] = await Promise.all([getInterests(), getPronouns()]);
+        const [interests, pronouns, genders] = await Promise.all([getInterests(), getPronouns(), getGenders()]);
         if (mounted) {
           setInterestOptions(interests);
           setPronounOptions(pronouns);
+          setGenderOptions(genders);
         }
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const { data: profile } = await supabase
           .from('profiles')
-          .select('name, age, pronouns, city, bio')
+          .select('name, age, gender, pronouns, city, bio')
           .eq('id', user.id)
           .maybeSingle();
         if (mounted && profile) {
@@ -49,10 +53,19 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
             ...prev,
             name: prev.name || profile.name || '',
             age: prev.age || profile.age || '',
+            gender: prev.gender || profile.gender || '',
             pronouns: prev.pronouns || profile.pronouns || '',
             city: prev.city || profile.city || '',
             bio: prev.bio || profile.bio || '',
           }));
+          setOriginalProfile({
+            name: profile.name || '',
+            age: profile.age || '',
+            gender: profile.gender || '',
+            pronouns: profile.pronouns || '',
+            city: profile.city || '',
+            bio: profile.bio || ''
+          });
         }
         // Load my interests from user_interests -> interests(label)
         const { data: uiRows, error: uiErr } = await supabase
@@ -80,6 +93,19 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
     for (const v of a) if (!b.has(v)) return true;
     return false;
   }, [originalInterests, me.interests]);
+
+  const profileDirty = useMemo(() => {
+    return (
+      (me.name || '') !== (originalProfile.name || '') ||
+      (me.age || '') !== (originalProfile.age || '') ||
+      (me.gender || '') !== (originalProfile.gender || '') ||
+      (me.pronouns || '') !== (originalProfile.pronouns || '') ||
+      (me.city || '') !== (originalProfile.city || '') ||
+      (me.bio || '') !== (originalProfile.bio || '')
+    );
+  }, [me.name, me.age, me.gender, me.pronouns, me.city, me.bio, originalProfile]);
+
+  const isDirty = profileDirty || interestsDirty;
 
   const saveMyInterests = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -135,8 +161,10 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
   const handleNext = async () => {
     setSaving(true);
     try {
-      await saveMyInterests();
-      await upsertProfile(me);
+      if (isDirty) {
+        if (interestsDirty) await saveMyInterests();
+        if (profileDirty) await upsertProfile(me);
+      }
       onNext();
     } catch (e) {
       alert(e.message || 'Failed to save profile');
@@ -165,7 +193,24 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto relative pt-12">
+      <div className="absolute top-2 left-0">
+        {showBack && (
+          <button onClick={onBack} aria-label="Back" className="px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100">
+            <span className="text-xl">←</span>
+          </button>
+        )}
+      </div>
+      <div className="absolute top-2 right-0">
+        <button
+          onClick={handleNext}
+          disabled={!isProfileValid(me) || saving || !isDirty}
+          className={`${(!isProfileValid(me) || saving || !isDirty) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600'} px-6 py-2 font-semibold rounded-lg transition-all duration-200`}
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+
       <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Tell us about yourself</h1>
       {loadError && (
         <div className="mb-4 px-4 py-2 rounded bg-red-50 text-red-700 text-sm">{loadError}</div>
@@ -228,8 +273,18 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Pronouns *</label>
-          <select value={me.pronouns} onChange={(e) => setMe({...me, pronouns: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Gender *</label>
+          <select value={me.gender || ''} onChange={(e) => setMe({...me, gender: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent">
+            <option value="">Select gender</option>
+            {genderOptions.map(g => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Pronouns (optional)</label>
+          <select value={me.pronouns || ''} onChange={(e) => setMe({...me, pronouns: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent">
             <option value="">Select pronouns</option>
             {pronounOptions.map(pronoun => (
               <option key={pronoun} value={pronoun}>{pronoun}</option>
@@ -275,18 +330,7 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
         </div>
       </div>
 
-      <div className="mt-8 flex justify-between">
-        {showBack && (
-          <button onClick={onBack} className="px-8 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition-colors duration-200">Back to Room</button>
-        )}
-        <button
-          onClick={handleNext}
-          disabled={!isProfileValid(me) || saving}
-          className="px-8 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-600 transition-all duration-200"
-        >
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-      </div>
+      
     </div>
   );
 };
