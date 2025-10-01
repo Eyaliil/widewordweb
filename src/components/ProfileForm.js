@@ -4,19 +4,9 @@ import { isProfileValid } from '../utils/validation';
 import { supabase } from '../lib/supabaseClient';
 
 async function upsertProfile(me) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not signed in');
-  const payload = {
-    id: user.id,
-    name: me.name,
-    age: me.age || null,
-    gender: me.gender || null,
-    pronouns: me.pronouns || null,
-    city: me.city || null,
-    bio: me.bio || null,
-  };
-  const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' });
-  if (error) throw error;
+  // Mock function for fake users - just return success
+  console.log('Mock: Saving profile for fake user:', me);
+  return Promise.resolve();
 }
 
 const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }) => {
@@ -40,43 +30,17 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
           setPronounOptions(pronouns);
           setGenderOptions(genders);
         }
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('name, age, gender, pronouns, city, bio')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (mounted && profile) {
-          // Merge only missing fields so we don't overwrite in-progress edits
-          setMe(prev => ({
-            ...prev,
-            name: prev.name || profile.name || '',
-            age: prev.age || profile.age || '',
-            gender: prev.gender || profile.gender || '',
-            pronouns: prev.pronouns || profile.pronouns || '',
-            city: prev.city || profile.city || '',
-            bio: prev.bio || profile.bio || '',
-          }));
+        // Mock data loading for fake users - data is already loaded from currentUser in App.js
+        if (mounted) {
           setOriginalProfile({
-            name: profile.name || '',
-            age: profile.age || '',
-            gender: profile.gender || '',
-            pronouns: profile.pronouns || '',
-            city: profile.city || '',
-            bio: profile.bio || ''
+            name: me.name || '',
+            age: me.age || '',
+            gender: me.gender || '',
+            pronouns: me.pronouns || '',
+            city: me.city || '',
+            bio: me.bio || ''
           });
-        }
-        // Load my interests from user_interests -> interests(label)
-        const { data: uiRows, error: uiErr } = await supabase
-          .from('user_interests')
-          .select('interest_id, interests(label)')
-          .eq('user_id', user.id);
-        if (uiErr) throw uiErr;
-        const labels = (uiRows || []).map(r => r.interests?.label).filter(Boolean);
-        if (mounted && labels) {
-          setOriginalInterests(labels);
-          setMe(prev => ({ ...prev, interests: prev.interests && prev.interests.length ? prev.interests : labels }));
+          setOriginalInterests(me.interests || []);
         }
       } catch (e) {
         if (mounted) setLoadError(e.message || 'Failed to load your profile');
@@ -108,62 +72,20 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
   const isDirty = profileDirty || interestsDirty;
 
   const saveMyInterests = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not signed in');
-    const selected = me.interests || [];
-    if (!selected.length) throw new Error('Please select at least one interest');
-
-    const toAddLabels = selected.filter(lbl => !originalInterests.includes(lbl));
-    const toRemoveLabels = originalInterests.filter(lbl => !selected.includes(lbl));
-
-    if (toAddLabels.length === 0 && toRemoveLabels.length === 0) return; // nothing to do
-
-    const allLabels = Array.from(new Set([...toAddLabels, ...toRemoveLabels]));
-    const { data: interestRows, error: selErr } = await supabase
-      .from('interests')
-      .select('id, label')
-      .in('label', allLabels);
-    if (selErr) throw selErr;
-    const labelToId = new Map((interestRows || []).map(r => [r.label, r.id]));
-
-    // Deletes
-    if (toRemoveLabels.length > 0) {
-      const removeIds = toRemoveLabels.map(lbl => labelToId.get(lbl)).filter(Boolean);
-      if (removeIds.length > 0) {
-        const { error: delErr } = await supabase
-          .from('user_interests')
-          .delete()
-          .eq('user_id', user.id)
-          .in('interest_id', removeIds);
-        if (delErr) throw delErr;
-      }
-    }
-
-    // Inserts
-    if (toAddLabels.length > 0) {
-      const addIds = toAddLabels.map(lbl => labelToId.get(lbl)).filter(Boolean);
-      if (addIds.length !== toAddLabels.length) {
-        const missing = toAddLabels.filter(lbl => !labelToId.get(lbl));
-        if (missing.length) throw new Error(`Interests not found in DB: ${missing.join(', ')}`);
-      }
-      if (addIds.length > 0) {
-        const rows = addIds.map(id => ({ user_id: user.id, interest_id: id }));
-        const { error: insErr } = await supabase
-          .from('user_interests')
-          .insert(rows);
-        if (insErr) throw insErr;
-      }
-    }
-    // Update originals
-    setOriginalInterests(selected);
+    // Mock function for fake users - just return success
+    console.log('Mock: Saving interests for fake user:', me.interests);
+    setOriginalInterests(me.interests || []);
+    return Promise.resolve();
   };
 
   const handleNext = async () => {
     setSaving(true);
     try {
       if (isDirty) {
-        if (interestsDirty) await saveMyInterests();
+        // ALWAYS save profile first to ensure user_id exists in profiles table
         if (profileDirty) await upsertProfile(me);
+        // Then save interests (which references the profile)
+        if (interestsDirty) await saveMyInterests();
       }
       onNext();
     } catch (e) {

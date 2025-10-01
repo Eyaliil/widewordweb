@@ -45,40 +45,22 @@ import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../ser
            setVibeOptions(vibes);
          }
  
-         const { data: { user } } = await supabase.auth.getUser();
-         if (!user) { setLoading(false); return; }
- 
-         // LOAD searched interests
-         const { data: siRows, error: siErr } = await supabase
-           .from('user_search_interests')
-           .select('interest_id, interests(label)')
-           .eq('user_id', user.id);
-         if (siErr) throw siErr;
-         const labels = (siRows || []).map(r => r.interests?.label).filter(Boolean);
-         if (mounted) {
-           setSelectedInterests(labels);
-           setOriginalInterests(labels);
-         }
- 
-         // LOAD searched profile
-         const { data: spRow, error: spErr } = await supabase
-           .from('user_search_profile')
-           .select('genders, age_min, age_max, distance_km, relationship_types, vibe')
-           .eq('user_id', user.id)
-           .maybeSingle();
-         if (spErr) throw spErr;
-         const loaded = spRow ? {
-           genders: spRow.genders || [],
-           ageMin: spRow.age_min ?? 25,
-           ageMax: spRow.age_max ?? 35,
-           distanceKm: spRow.distance_km ?? 50,
-           relationshipTypes: spRow.relationship_types || [],
-           vibe: spRow.vibe || ''
-         } : { ...profilePrefs };
-         if (mounted) {
-           setProfilePrefs(loaded);
-           setOriginalProfile(loaded);
-         }
+        // Mock data loading for fake users - use default preferences
+        if (mounted) {
+          setSelectedInterests(['Music', 'Travel', 'Art']); // Default search interests
+          setOriginalInterests(['Music', 'Travel', 'Art']);
+          
+          const loaded = {
+            genders: ['Man', 'Woman'],
+            ageMin: 25,
+            ageMax: 35,
+            distanceKm: 50,
+            relationshipTypes: ['Casual Dating', 'Serious Relationship'],
+            vibe: 'Fun'
+          };
+          setProfilePrefs(loaded);
+          setOriginalProfile(loaded);
+        }
        } catch (e) {
          console.error(e);
          setErrorMsg(e.message || 'Failed to load your preferences');
@@ -127,63 +109,19 @@ import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../ser
      });
    };
  
-   const saveInterests = async () => {
-     const { data: { user } } = await supabase.auth.getUser();
-     if (!user) throw new Error('Not signed in');
-     const toAddLabels = selectedInterests.filter(lbl => !originalInterests.includes(lbl));
-     const toRemoveLabels = originalInterests.filter(lbl => !selectedInterests.includes(lbl));
-     if (toAddLabels.length === 0 && toRemoveLabels.length === 0) return;
-     const allLabels = Array.from(new Set([...toAddLabels, ...toRemoveLabels]));
-     const { data: interestRows, error: selErr } = await supabase
-       .from('interests')
-       .select('id, label')
-       .in('label', allLabels);
-     if (selErr) throw selErr;
-     const map = new Map((interestRows || []).map(r => [r.label, r.id]));
-     if (toRemoveLabels.length > 0) {
-       const removeIds = toRemoveLabels.map(lbl => map.get(lbl)).filter(Boolean);
-       if (removeIds.length) {
-         const { error } = await supabase
-           .from('user_search_interests')
-           .delete()
-           .in('interest_id', removeIds)
-           .eq('user_id', user.id);
-         if (error) throw error;
-       }
-     }
-     if (toAddLabels.length > 0) {
-       const addIds = toAddLabels.map(lbl => map.get(lbl)).filter(Boolean);
-       if (addIds.length !== toAddLabels.length) {
-         const missing = toAddLabels.filter(lbl => !map.get(lbl));
-         if (missing.length) throw new Error(`Interests not found in DB: ${missing.join(', ')}`);
-       }
-       if (addIds.length) {
-         const rows = addIds.map(id => ({ user_id: user.id, interest_id: id }));
-         const { error } = await supabase
-           .from('user_search_interests')
-           .insert(rows);
-         if (error) throw error;
-       }
-     }
-     setOriginalInterests(selectedInterests);
-   };
+  const saveInterests = async () => {
+    // Mock function for fake users - just return success
+    console.log('Mock: Saving search interests for fake user:', selectedInterests);
+    setOriginalInterests(selectedInterests);
+    return Promise.resolve();
+  };
  
-   const saveProfilePrefs = async () => {
-     const { data: { user } } = await supabase.auth.getUser();
-     if (!user) throw new Error('Not signed in');
-     const payload = {
-       user_id: user.id,
-       genders: profilePrefs.genders,
-       age_min: profilePrefs.ageMin,
-       age_max: profilePrefs.ageMax,
-       distance_km: profilePrefs.distanceKm,
-       relationship_types: profilePrefs.relationshipTypes,
-       vibe: profilePrefs.vibe || null
-     };
-     const { error } = await supabase.from('user_search_profile').upsert(payload, { onConflict: 'user_id' });
-     if (error) throw error;
-     setOriginalProfile({ ...profilePrefs });
-   };
+  const saveProfilePrefs = async () => {
+    // Mock function for fake users - just return success
+    console.log('Mock: Saving profile preferences for fake user:', profilePrefs);
+    setOriginalProfile({ ...profilePrefs });
+    return Promise.resolve();
+  };
   
    const handleNext = async () => {
      setSaving(true);

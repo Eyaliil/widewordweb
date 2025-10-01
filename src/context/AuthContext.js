@@ -1,36 +1,36 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import React, { createContext, useContext, useState } from 'react';
+import { fakeUsers } from '../data/fakeUsers';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [session, setSession] = useState(null);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(fakeUsers[0]); // Default to first fake user
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    const init = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setSession(data.session ?? null);
-      setUser(data.session?.user ?? null);
-      setLoading(false);
-    };
-    init();
+  // Mock user object that matches Supabase auth user structure
+  const user = {
+    id: currentUser.id,
+    email: `${currentUser.name.toLowerCase().replace(' ', '.')}@example.com`,
+    user_metadata: {
+      name: currentUser.name
+    }
+  };
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-    });
+  const session = {
+    user: user,
+    access_token: 'mock-token',
+    refresh_token: 'mock-refresh-token'
+  };
 
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-
-  const value = { session, user, loading };
+  const value = { 
+    session, 
+    user, 
+    loading, 
+    currentUser, 
+    setCurrentUser,
+    fakeUsers 
+  };
+  
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
