@@ -5,7 +5,6 @@ import Home from './components/Home';
 import UserSelector from './components/UserSelector';
 // Chat removed
 import { useAuth } from './context/AuthContext';
-import { supabase } from './lib/supabaseClient';
 
 function App() {
   const { user, currentUser, setCurrentUser } = useAuth();
@@ -47,43 +46,15 @@ function App() {
   }, [currentUser]);
 
   const isProfileComplete = () => {
-    // For testing purposes, only require basic profile completion
-    const complete = me.name && me.age && me.gender && me.bio && me.interests.length > 0 &&
-           avatar.type && (avatar.image || avatar.emoji || avatar.initials);
-    
-    // Debug logging
-    console.log('Profile completion check:', {
-      name: me.name,
-      age: me.age,
-      gender: me.gender,
-      bio: me.bio,
-      interests: me.interests,
-      avatar: avatar,
-      complete: complete
-    });
-    
-    return complete;
+    // Always return true for testing - no profile completion requirements
+    return true;
   };
 
   useEffect(() => {
-    const ensureProfileThenRoute = async () => {
-      if (!user) return;
-      try {
-        // For fake users, check if profile is complete based on currentUser data
-        const fieldsOk = !!(currentUser && currentUser.name && currentUser.age && currentUser.gender && currentUser.bio);
-        const interestsOk = currentUser && currentUser.interests && currentUser.interests.length > 0;
-        const complete = fieldsOk && interestsOk;
-        setProfileCompleteDb(!!complete);
-        if (!complete) {
-          setOnboarding(true);
-          setIsEditingProfile(false);
-          setShowBackOnProfile(false);
-          setCurrentView('profile');
-        }
-      } catch (_) {}
-    };
-    ensureProfileThenRoute();
-  }, [user, currentUser]);
+    // Skip profile completion check - always go directly to room for testing
+    setProfileCompleteDb(true);
+    setCurrentView('room');
+  }, [currentUser]);
 
 
   const goToRoom = () => setCurrentView('room');

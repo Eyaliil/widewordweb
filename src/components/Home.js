@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import AuthPanel from './AuthPanel';
+// AuthPanel removed - authentication skipped
 import MatchModal from './MatchModal';
 import NotificationCenter from './NotificationCenter';
-import { supabase } from '../lib/supabaseClient';
+// Authentication removed - no longer needed
 import { loadPublicProfiles } from '../services/profileService';
-import { currentMatchingService } from '../services/matchingService';
-import { fakeUsers } from '../data/fakeUsers';
+import { getMatchingService } from '../services/matchingService';
+import { userService } from '../services/userService';
 
 const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProfile, onEditPreferences }) => {
-  const { user, currentUser } = useAuth();
+  const { user, currentUser, isUsingFakeUsers } = useAuth();
+  const matchingService = getMatchingService(isUsingFakeUsers);
   const [users, setUsers] = useState([]);
   const [currentMatch, setCurrentMatch] = useState(null);
   const [showMatchModal, setShowMatchModal] = useState(false);
@@ -18,12 +19,12 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
 
-  // Load users via RPC (public_profiles)
+  // Load database users
   useEffect(() => {
     let isCancelled = false;
     const load = async () => {
       try {
-        const data = await loadPublicProfiles(20);
+        const data = await userService.getAllUsers();
         if (!isCancelled) setUsers(data);
       } catch (e) {
         console.error('Failed to load users:', e);
@@ -33,10 +34,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     return () => { isCancelled = true; };
   }, []);
 
-  const checkDbProfileComplete = async () => {
-    if (isProfileComplete) return true;
-    return false;
-  };
+  // Profile completion check removed for testing
 
   // Load match history and notifications when user changes
   useEffect(() => {
@@ -59,16 +57,16 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
 
   const loadMatchHistory = async () => {
     try {
-      const history = await currentMatchingService.getMatchHistory(currentUser.id);
+      const history = await matchingService.getMatchHistory(currentUser.id);
       setMatchHistory(history);
     } catch (error) {
       console.error('Failed to load match history:', error);
     }
   };
 
-  const loadNotifications = () => {
+  const loadNotifications = async () => {
     try {
-      const notifications = currentMatchingService.getNotifications(currentUser.id);
+      const notifications = await matchingService.getNotifications(currentUser.id);
       setNotificationCount(notifications.length);
     } catch (error) {
       console.error('Failed to load notifications:', error);
@@ -76,16 +74,13 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   };
 
   const goOnline = async () => {
-    if (!(await checkDbProfileComplete())) {
-      return;
-    }
-
+    // Skip profile completion check for testing
     setIsOnline(true);
     setIsMatching(true);
     
     try {
       // Go online in the matching service
-      const result = await currentMatchingService.goOnline(currentUser.id);
+      const result = await matchingService.goOnline(currentUser.id);
       
       // Check if there are pending matches waiting for decision
       if (result.hasPendingMatches && result.pendingMatches.length > 0) {
@@ -101,24 +96,28 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         setCurrentMatch(pendingMatch);
         setShowMatchModal(true);
         setIsMatching(false);
-        // Remove alert to avoid blocking the UI
+      } else if (result.newMatches && result.newMatches.length > 0) {
+        // Show the new matches found
+        console.log(`Found ${result.newMatches.length} new matches`);
+        const bestMatch = result.newMatches[0];
+        console.log('New match:', bestMatch);
+        setCurrentMatch(bestMatch);
+        setShowMatchModal(true);
+        
+        // Reload notifications to show the new match notification
+        setTimeout(() => {
+          loadNotifications();
+        }, 1000);
+        
+        setIsMatching(false);
       } else {
-        // Simulate finding new matches
-        setTimeout(async () => {
-          const matches = await currentMatchingService.findMatches(currentUser.id);
-          if (matches.length > 0) {
-            // Show the best match
-            const bestMatch = matches[0];
-            setCurrentMatch(bestMatch);
-            setShowMatchModal(true);
-            
-            // Reload notifications to show the new match notification
-            setTimeout(() => {
-              loadNotifications();
-            }, 1000);
-          }
-          setIsMatching(false);
-        }, 3000);
+        // No matches found
+        console.log('No matches found');
+        setIsMatching(false);
+        // Show a brief message to the user
+        setTimeout(() => {
+          alert('No matches found at the moment. Keep checking back!');
+        }, 500);
       }
       
     } catch (error) {
@@ -134,7 +133,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     setCurrentMatch(null);
     
     try {
-      await currentMatchingService.goOffline(currentUser.id);
+      await matchingService.goOffline(currentUser.id);
     } catch (error) {
       console.error('Failed to go offline:', error);
     }
@@ -144,7 +143,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     if (!currentMatch) return;
     
     try {
-      const result = await currentMatchingService.makeDecision(currentMatch.id, currentUser.id, 'accepted');
+      const result = await matchingService.makeDecision(currentMatch.id, currentUser.id, 'accepted');
       
       if (result.success) {
         // Update the current match with the new decision
@@ -187,7 +186,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     if (!currentMatch) return;
     
     try {
-      const result = await currentMatchingService.makeDecision(currentMatch.id, currentUser.id, 'rejected');
+      const result = await matchingService.makeDecision(currentMatch.id, currentUser.id, 'rejected');
       
       if (result.success) {
         // Update the current match with the new decision
@@ -255,33 +254,24 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
             {user && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-xs">
                 <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
-                <span className="hidden md:inline">Signed in as</span>
-                <span className="font-medium truncate max-w-[10rem]">{user.email}</span>
-                <button onClick={async () => { await supabase.auth.signOut(); }} className="ml-1 px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300">Sign out</button>
+                <span className="hidden md:inline">Welcome</span>
+                <span className="font-medium truncate max-w-[10rem]">{user.user_metadata?.name || 'User'}</span>
               </div>
             )}
             <div className="flex items-center gap-2">
-              {user ? (
-                <>
-                  <button 
-                    onClick={() => setShowNotifications(true)}
-                    className="relative px-3 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors"
-                  >
-                    🔔 Notifications
-                    {notificationCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {notificationCount}
-                      </span>
-                    )}
-                  </button>
-                  <button onClick={onEditProfile} className="px-3 sm:px-4 py-2 text-sm rounded-lg bg-gray-900 text-white hover:bg-gray-800">Edit Profile</button>
-                  <button onClick={onEditPreferences} className="px-3 sm:px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300">Edit Preferences</button>
-                </>
-              ) : (
-                <div className="sm:hidden">
-                  <AuthPanel />
-                </div>
-              )}
+              <button 
+                onClick={() => setShowNotifications(true)}
+                className="relative px-3 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors"
+              >
+                🔔 Notifications
+                {notificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {notificationCount}
+                  </span>
+                )}
+              </button>
+              <button onClick={onEditProfile} className="px-3 sm:px-4 py-2 text-sm rounded-lg bg-gray-900 text-white hover:bg-gray-800">Edit Profile</button>
+              <button onClick={onEditPreferences} className="px-3 sm:px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300">Edit Preferences</button>
             </div>
           </div>
         </div>
@@ -291,30 +281,19 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       <section className="pt-10 pb-8 text-center">
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gray-900">The Future of Matchmaking ✨</h1>
         <p className="mt-3 text-gray-600 max-w-2xl mx-auto">Let the algorithm find who truly fits you.</p>
+        <p className="mt-2 text-sm text-gray-500">Use the profile selector (top right) to test different users</p>
       </section>
 
-      {/* Auth panel for logged-out users */}
-      {!user && (
-        <div className="mb-8 flex justify-center">
-          <div className="w-full max-w-md">
-            <AuthPanel />
-          </div>
-        </div>
-      )}
+      {/* Auth panel removed - authentication skipped */}
 
       {/* Primary action and status */}
       <div className="text-center mb-10">
         {!isOnline ? (
           <button
             onClick={goOnline}
-            disabled={!isProfileComplete}
-            className={`px-8 py-4 font-semibold rounded-xl text-lg transition-all duration-200 shadow-lg ${
-              !isProfileComplete 
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                : 'bg-black text-white hover:bg-gray-800'
-            }`}
+            className="px-8 py-4 font-semibold rounded-xl text-lg transition-all duration-200 shadow-lg bg-black text-white hover:bg-gray-800"
           >
-            {!isProfileComplete ? 'Complete Profile First' : 'Go Online'}
+            Go Online
           </button>
         ) : (
           <div className="space-y-4">
@@ -349,7 +328,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
             {matchHistory.slice(0, 6).map((match, index) => {
               // Get the matched user's info
               const matchedUserId = match.user1Id === currentUser.id ? match.user2Id : match.user1Id;
-              const matchedUser = fakeUsers.find(u => u.id === matchedUserId);
+              const matchedUser = users.find(u => u.id === matchedUserId);
               const matchedUserName = matchedUser ? matchedUser.name : 'Unknown User';
               const matchedUserAvatar = matchedUser ? matchedUser.avatar.emoji : '👤';
               
