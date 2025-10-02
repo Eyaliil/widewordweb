@@ -1,9 +1,38 @@
 import React from 'react';
 
-const MatchModal = ({ match, onAccept, onReject, onClose, isVisible }) => {
+const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUserId }) => {
   if (!isVisible || !match) return null;
 
   const { matchedUser, matchScore, matchReasons } = match;
+  
+  // Determine the current user's role in this match
+  const isCurrentUser1 = match.user1Id === currentUserId;
+  const currentUserDecision = isCurrentUser1 ? match.user1Decision : match.user2Decision;
+  const otherUserDecision = isCurrentUser1 ? match.user2Decision : match.user1Decision;
+  
+  // Add safety checks for matchedUser
+  if (!matchedUser) {
+    console.error('MatchModal: matchedUser is undefined for match:', match);
+    console.error('MatchModal: currentUserId:', currentUserId);
+    console.error('MatchModal: match.user1Id:', match.user1Id);
+    console.error('MatchModal: match.user2Id:', match.user2Id);
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-2xl p-6">
+          <div className="text-center">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">Match Error</h2>
+            <p className="text-gray-600 mb-4">Unable to load match details. Please try again.</p>
+            <button
+              onClick={onClose}
+              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -28,22 +57,32 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible }) => {
           {/* Matched User Profile */}
           <div className="text-center mb-6">
             <div className="w-24 h-24 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl border-4 border-white shadow-lg">
-              {matchedUser.avatar?.emoji || '👤'}
+              {matchedUser.avatar?.emoji || matchedUser.avatar_emoji || '👤'}
             </div>
-            <h3 className="text-xl font-bold text-gray-800 mb-1">{matchedUser.name}</h3>
-            <p className="text-gray-600 mb-2">{matchedUser.age} • {matchedUser.city}</p>
-            <p className="text-sm text-gray-500 mb-4">{matchedUser.bio}</p>
+            <h3 className="text-xl font-bold text-gray-800 mb-1">{matchedUser.name || 'Unknown User'}</h3>
+            <p className="text-gray-600 mb-2">
+              {matchedUser.age ? `${matchedUser.age} • ` : ''}{matchedUser.city || 'Unknown Location'}
+            </p>
+            <p className="text-sm text-gray-500 mb-4">{matchedUser.bio || 'No bio available'}</p>
             
             {/* Interests */}
             <div className="flex flex-wrap gap-2 justify-center mb-4">
-              {matchedUser.interests?.slice(0, 4).map((interest, index) => (
-                <span key={index} className="px-3 py-1 bg-pink-100 text-pink-700 rounded-full text-xs font-medium">
-                  {interest}
-                </span>
-              ))}
-              {matchedUser.interests?.length > 4 && (
+              {matchedUser.interests && matchedUser.interests.length > 0 ? (
+                <>
+                  {matchedUser.interests.slice(0, 4).map((interest, index) => (
+                    <span key={index} className="px-3 py-1 bg-pink-100 text-pink-700 rounded-full text-xs font-medium">
+                      {interest}
+                    </span>
+                  ))}
+                  {matchedUser.interests.length > 4 && (
+                    <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                      +{matchedUser.interests.length - 4} more
+                    </span>
+                  )}
+                </>
+              ) : (
                 <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
-                  +{matchedUser.interests.length - 4} more
+                  No interests listed
                 </span>
               )}
             </div>
@@ -80,10 +119,11 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible }) => {
                   match.status === 'expired' ? 'bg-yellow-100 text-yellow-800' :
                   'bg-blue-100 text-blue-800'
                 }`}>
-                  {match.status === 'mutual_match' ? '🎉 Mutual Match!' :
-                   match.status === 'rejected' ? '❌ Rejected' :
-                   match.status === 'expired' ? '⏰ Expired' :
-                   '⏳ Waiting for Decisions'}
+                  {match.status === 'mutual_match' ? '🎉 You both accepted!' :
+                   match.status === 'rejected' ? '❌ Match was rejected' :
+                   match.status === 'expired' ? '⏰ Match expired (24h)' :
+                   currentUserDecision === 'pending' ? '⏳ Waiting for your decision' :
+                   '⏳ Waiting for their decision'}
                 </span>
               </div>
             </div>
@@ -93,23 +133,23 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible }) => {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-600">Your decision:</span>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  match.user1Decision === 'accepted' ? 'bg-green-100 text-green-800' :
-                  match.user1Decision === 'rejected' ? 'bg-red-100 text-red-800' :
+                  currentUserDecision === 'accepted' ? 'bg-green-100 text-green-800' :
+                  currentUserDecision === 'rejected' ? 'bg-red-100 text-red-800' :
                   'bg-gray-100 text-gray-600'
                 }`}>
-                  {match.user1Decision === 'pending' ? '⏳ Pending' : 
-                   match.user1Decision === 'accepted' ? '✅ Accepted' : '❌ Rejected'}
+                  {currentUserDecision === 'pending' ? '⏳ Pending' : 
+                   currentUserDecision === 'accepted' ? '✅ Accepted' : '❌ Rejected'}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-600">{matchedUser.name}'s decision:</span>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  match.user2Decision === 'accepted' ? 'bg-green-100 text-green-800' :
-                  match.user2Decision === 'rejected' ? 'bg-red-100 text-red-800' :
+                  otherUserDecision === 'accepted' ? 'bg-green-100 text-green-800' :
+                  otherUserDecision === 'rejected' ? 'bg-red-100 text-red-800' :
                   'bg-gray-100 text-gray-600'
                 }`}>
-                  {match.user2Decision === 'pending' ? '⏳ Pending' : 
-                   match.user2Decision === 'accepted' ? '✅ Accepted' : '❌ Rejected'}
+                  {otherUserDecision === 'pending' ? '⏳ Pending' : 
+                   otherUserDecision === 'accepted' ? '✅ Accepted' : '❌ Rejected'}
                 </span>
               </div>
             </div>
@@ -149,7 +189,7 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible }) => {
               </div>
               <p className="text-sm text-gray-600">No decisions were made within 24 hours</p>
             </div>
-          ) : match.user1Decision === 'pending' ? (
+          ) : currentUserDecision === 'pending' ? (
             <div className="flex space-x-3">
               <button
                 onClick={onReject}
@@ -167,9 +207,9 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible }) => {
           ) : (
             <div className="text-center">
               <div className="bg-gray-100 text-gray-600 py-3 px-4 rounded-xl font-semibold">
-                {match.user1Decision === 'accepted' ? '✅ You accepted this match' : '❌ You rejected this match'}
+                {currentUserDecision === 'accepted' ? '✅ You accepted this match' : '❌ You rejected this match'}
               </div>
-              {match.user2Decision === 'pending' && (
+              {otherUserDecision === 'pending' && (
                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center justify-center text-sm text-blue-700">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
@@ -184,7 +224,7 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible }) => {
             onClick={onClose}
             className="w-full mt-3 text-gray-500 text-sm hover:text-gray-700 transition-colors"
           >
-            {match.status === 'pending' && match.user1Decision === 'pending' ? 'Maybe later' : 'Close'}
+            {match.status === 'pending' && currentUserDecision === 'pending' ? 'Maybe later' : 'Close'}
           </button>
         </div>
       </div>

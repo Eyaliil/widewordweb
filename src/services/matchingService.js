@@ -282,17 +282,6 @@ export class MockMatchingService {
   createMatch(user1Id, user2Id, score, reasons) {
     const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Get the matched user data for the UI - try fakeUsers first, then create fallback
-    let matchedUser = fakeUsers.find(u => u.id === user2Id);
-    if (!matchedUser) {
-      // Create a fallback user object if not found in fakeUsers
-      matchedUser = {
-        id: user2Id,
-        name: `User ${user2Id.slice(0, 8)}...`,
-        avatar: { emoji: '👤' }
-      };
-    }
-    
     const match = {
       id: matchId,
       user1Id,
@@ -301,7 +290,7 @@ export class MockMatchingService {
       user2Decision: 'pending',
       matchScore: score,
       matchReasons: reasons,
-      matchedUser: matchedUser, // Add matched user data for UI
+      // Don't set matchedUser here - it will be populated dynamically based on who's viewing
       createdAt: new Date(),
       status: 'pending', // pending, mutual_match, rejected, expired
       completedAt: null,
@@ -403,20 +392,33 @@ export class MockMatchingService {
       if (!processedPairs.has(pairKey)) {
         processedPairs.add(pairKey);
         
-        // Show the match from the current user's perspective
+        // Create a copy of the match for this user's perspective
+        const userMatch = { ...match };
+        
+        // Populate matchedUser based on current user's perspective
         if (match.user1Id === userId) {
-          uniqueMatches.push(match);
+          // Current user is user1 (sent the match), matchedUser should be user2
+          userMatch.matchedUser = fakeUsers.find(u => u.id === match.user2Id);
+          if (!userMatch.matchedUser) {
+            userMatch.matchedUser = {
+              id: match.user2Id,
+              name: `User ${match.user2Id.slice(0, 8)}...`,
+              avatar: { emoji: '👤' }
+            };
+          }
         } else {
-          // If the current user is user2, create a view from their perspective
-          const userPerspectiveMatch = {
-            ...match,
-            user1Id: userId,
-            user2Id: match.user1Id,
-            user1Decision: match.user2Decision,
-            user2Decision: match.user1Decision
-          };
-          uniqueMatches.push(userPerspectiveMatch);
+          // Current user is user2 (received the match), matchedUser should be user1
+          userMatch.matchedUser = fakeUsers.find(u => u.id === match.user1Id);
+          if (!userMatch.matchedUser) {
+            userMatch.matchedUser = {
+              id: match.user1Id,
+              name: `User ${match.user1Id.slice(0, 8)}...`,
+              avatar: { emoji: '👤' }
+            };
+          }
         }
+        
+        uniqueMatches.push(userMatch);
       }
     });
     
@@ -546,44 +548,33 @@ export class MockMatchingService {
       if (!processedPairs.has(pairKey)) {
         processedPairs.add(pairKey);
         
-        // Show the match from the current user's perspective
+        // Create a copy of the match for this user's perspective
+        const userMatch = { ...match };
+        
+        // Populate matchedUser based on current user's perspective
         if (match.user1Id === userId) {
-          // Ensure matchedUser is included
-          if (!match.matchedUser) {
-            // Try to find the matched user in fakeUsers first, then in database
-            match.matchedUser = fakeUsers.find(u => u.id === match.user2Id);
-            if (!match.matchedUser) {
-              // If not found in fakeUsers, create a basic user object
-              match.matchedUser = {
-                id: match.user2Id,
-                name: `User ${match.user2Id.slice(0, 8)}...`,
-                avatar: { emoji: '👤' }
-              };
-            }
+          // Current user is user1 (sent the match), matchedUser should be user2
+          userMatch.matchedUser = fakeUsers.find(u => u.id === match.user2Id);
+          if (!userMatch.matchedUser) {
+            userMatch.matchedUser = {
+              id: match.user2Id,
+              name: `User ${match.user2Id.slice(0, 8)}...`,
+              avatar: { emoji: '👤' }
+            };
           }
-          uniqueMatches.push(match);
         } else {
-          // If the current user is user2, create a view from their perspective
-          let matchedUser = fakeUsers.find(u => u.id === match.user1Id);
-          if (!matchedUser) {
-            // If not found in fakeUsers, create a basic user object
-            matchedUser = {
+          // Current user is user2 (received the match), matchedUser should be user1
+          userMatch.matchedUser = fakeUsers.find(u => u.id === match.user1Id);
+          if (!userMatch.matchedUser) {
+            userMatch.matchedUser = {
               id: match.user1Id,
               name: `User ${match.user1Id.slice(0, 8)}...`,
               avatar: { emoji: '👤' }
             };
           }
-          
-          const userPerspectiveMatch = {
-            ...match,
-            user1Id: userId,
-            user2Id: match.user1Id,
-            user1Decision: match.user2Decision,
-            user2Decision: match.user1Decision,
-            matchedUser: matchedUser
-          };
-          uniqueMatches.push(userPerspectiveMatch);
         }
+        
+        uniqueMatches.push(userMatch);
       }
     });
     
@@ -1145,9 +1136,11 @@ export class SupabaseMatchingService {
       if (!processedPairs.has(pairKey)) {
         processedPairs.add(pairKey);
         
-        // Show the match from the current user's perspective
+        // Keep the original match structure, just ensure matchedUser is populated correctly
+        let matchedUserData;
         if (match.user1_id === userId) {
-          const matchedUserData = match.user2 ? {
+          // Current user is user1 (sent the match), matchedUser should be user2
+          matchedUserData = match.user2 ? {
             id: match.user2.user_id,
             name: match.user2.name,
             age: match.user2.age,
@@ -1162,23 +1155,9 @@ export class SupabaseMatchingService {
             name: `User ${match.user2_id.slice(0, 8)}...`,
             avatar: { emoji: '👤' }
           };
-
-          uniqueMatches.push({
-            id: match.id,
-            user1Id: match.user1_id,
-            user2Id: match.user2_id,
-            user1Decision: match.user1_decision,
-            user2Decision: match.user2_decision,
-            matchScore: match.match_score,
-            matchReasons: match.match_reasons,
-            matchedUser: matchedUserData,
-            createdAt: new Date(match.created_at),
-            status: match.status,
-            expiresAt: new Date(match.expires_at)
-          });
         } else {
-          // If the current user is user2, create a view from their perspective
-          const matchedUserData = match.user1 ? {
+          // Current user is user2 (received the match), matchedUser should be user1
+          matchedUserData = match.user1 ? {
             id: match.user1.user_id,
             name: match.user1.name,
             age: match.user1.age,
@@ -1193,21 +1172,21 @@ export class SupabaseMatchingService {
             name: `User ${match.user1_id.slice(0, 8)}...`,
             avatar: { emoji: '👤' }
           };
-
-          uniqueMatches.push({
-            id: match.id,
-            user1Id: userId,
-            user2Id: match.user1_id,
-            user1Decision: match.user2_decision,
-            user2Decision: match.user1_decision,
-            matchScore: match.match_score,
-            matchReasons: match.match_reasons,
-            matchedUser: matchedUserData,
-            createdAt: new Date(match.created_at),
-            status: match.status,
-            expiresAt: new Date(match.expires_at)
-          });
         }
+
+        uniqueMatches.push({
+          id: match.id,
+          user1Id: match.user1_id,
+          user2Id: match.user2_id,
+          user1Decision: match.user1_decision,
+          user2Decision: match.user2_decision,
+          matchScore: match.match_score,
+          matchReasons: match.match_reasons,
+          matchedUser: matchedUserData,
+          createdAt: new Date(match.created_at),
+          status: match.status,
+          expiresAt: new Date(match.expires_at)
+        });
       }
       });
       
