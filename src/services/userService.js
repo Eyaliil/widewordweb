@@ -182,6 +182,44 @@ export class DatabaseUserService {
       email: email || `${profile.name.toLowerCase().replace(' ', '.')}@example.com`
     };
   }
+
+  // Test database connection and setup
+  async testDatabaseConnection() {
+    try {
+      console.log('🔗 Testing database connection...');
+      
+      // Test basic connection
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, name')
+        .limit(1);
+
+      if (error) {
+        console.error('❌ Database connection test failed:', error);
+        return { success: false, error: error.message };
+      }
+
+      console.log('✅ Database connection successful');
+      
+      // Test matches table
+      const { data: matches, error: matchesError } = await supabase
+        .from('matches')
+        .select('id')
+        .limit(1);
+
+      if (matchesError) {
+        console.error('❌ Matches table test failed:', matchesError);
+        return { success: false, error: 'Matches table not accessible: ' + matchesError.message };
+      }
+
+      console.log('✅ Matches table accessible');
+      
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Database test failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export const userService = new DatabaseUserService();

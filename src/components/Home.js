@@ -3,14 +3,25 @@ import { useAuth } from '../context/AuthContext';
 // AuthPanel removed - authentication skipped
 import MatchModal from './MatchModal';
 import NotificationCenter from './NotificationCenter';
+import ToastManager from './ToastManager';
 // Authentication removed - no longer needed
 import { loadPublicProfiles } from '../services/profileService';
 import { getMatchingService } from '../services/matchingService';
 import { userService } from '../services/userService';
 
 const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProfile, onEditPreferences }) => {
-  const { user, currentUser, isUsingFakeUsers } = useAuth();
-  const matchingService = getMatchingService(isUsingFakeUsers);
+  const { user, currentUser, isUsingFakeUsers, isUsingDatabaseUsers } = useAuth();
+  const matchingService = getMatchingService(isUsingFakeUsers, isUsingDatabaseUsers);
+  
+  // Debug logging for service selection
+  useEffect(() => {
+    console.log('🔧 Matching service debug:', {
+      isUsingFakeUsers,
+      isUsingDatabaseUsers,
+      serviceType: isUsingDatabaseUsers ? 'SupabaseMatchingService (Persistent)' : 'MockMatchingService (Memory only)',
+      currentUser: currentUser?.name
+    });
+  }, [isUsingFakeUsers, isUsingDatabaseUsers, currentUser]);
   const [users, setUsers] = useState([]);
   const [currentMatch, setCurrentMatch] = useState(null);
   const [showMatchModal, setShowMatchModal] = useState(false);
@@ -18,6 +29,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   const [matchHistory, setMatchHistory] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [activeSentMatch, setActiveSentMatch] = useState(null);
 
   // Load database users
   useEffect(() => {
@@ -36,11 +48,25 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
 
   // Profile completion check removed for testing
 
+  // Load active sent match
+  const loadActiveSentMatch = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const sentMatch = await matchingService.getActiveSentMatch(currentUser.id);
+      setActiveSentMatch(sentMatch);
+    } catch (error) {
+      console.error('Failed to load active sent match:', error);
+      setActiveSentMatch(null);
+    }
+  };
+
   // Load match history and notifications when user changes
   useEffect(() => {
     if (currentUser) {
       loadMatchHistory();
       loadNotifications();
+      loadActiveSentMatch();
     }
   }, [currentUser]);
 
@@ -82,6 +108,14 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       // Go online in the matching service
       const result = await matchingService.goOnline(currentUser.id);
       
+      // Check if there's an error (like already having an active sent match)
+      if (!result.success) {
+        window.showToast(result.error, 'warning', 4000);
+        setIsOnline(false);
+        setIsMatching(false);
+        return;
+      }
+      
       // Check if there are pending matches waiting for decision
       if (result.hasPendingMatches && result.pendingMatches.length > 0) {
         console.log(`Found ${result.pendingMatches.length} pending matches`);
@@ -106,7 +140,9 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         
         // Reload notifications to show the new match notification
         setTimeout(() => {
+          loadMatchHistory();
           loadNotifications();
+          loadActiveSentMatch();
         }, 1000);
         
         setIsMatching(false);
@@ -116,7 +152,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         setIsMatching(false);
         // Show a brief message to the user
         setTimeout(() => {
-          alert('No matches found at the moment. Keep checking back!');
+          window.showToast('No matches found at the moment. Keep checking back!', 'info', 4000);
         }, 500);
       }
       
@@ -151,26 +187,27 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         
         // Check match status
         if (result.match.status === 'mutual_match') {
-          alert('🎉 Mutual match! You both accepted each other!');
+          window.showToast('🎉 Mutual match! You both accepted each other!', 'success', 5000);
           setShowMatchModal(false);
           setCurrentMatch(null);
         } else if (result.match.status === 'rejected') {
-          alert('❌ Match ended - different decisions were made');
+          window.showToast('❌ Match ended - different decisions were made', 'warning', 4000);
           setShowMatchModal(false);
           setCurrentMatch(null);
         } else if (result.match.status === 'expired') {
-          alert('⏰ Match has expired');
+          window.showToast('⏰ Match has expired', 'warning', 3000);
           setShowMatchModal(false);
           setCurrentMatch(null);
         } else {
-          alert('✅ Your decision has been recorded! Waiting for the other person...');
+          window.showToast('✅ Your decision has been recorded! Waiting for the other person...', 'success', 4000);
         }
         
         // Reload match history and notifications
         await loadMatchHistory();
         await loadNotifications();
+        await loadActiveSentMatch();
       } else {
-        alert(`❌ Error: ${result.error}`);
+        window.showToast(`❌ Error: ${result.error}`, 'error', 4000);
         if (result.error === 'Match has expired' || result.error === 'Match is no longer active') {
           setShowMatchModal(false);
           setCurrentMatch(null);
@@ -178,7 +215,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       }
     } catch (error) {
       console.error('Failed to accept match:', error);
-      alert('❌ Failed to accept match. Please try again.');
+      window.showToast('❌ Failed to accept match. Please try again.', 'error', 4000);
     }
   };
 
@@ -194,26 +231,27 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         
         // Check match status
         if (result.match.status === 'mutual_match') {
-          alert('🎉 Mutual match! You both accepted each other!');
+          window.showToast('🎉 Mutual match! You both accepted each other!', 'success', 5000);
           setShowMatchModal(false);
           setCurrentMatch(null);
         } else if (result.match.status === 'rejected') {
-          alert('❌ Match ended - different decisions were made');
+          window.showToast('❌ Match ended - different decisions were made', 'warning', 4000);
           setShowMatchModal(false);
           setCurrentMatch(null);
         } else if (result.match.status === 'expired') {
-          alert('⏰ Match has expired');
+          window.showToast('⏰ Match has expired', 'warning', 3000);
           setShowMatchModal(false);
           setCurrentMatch(null);
         } else {
-          alert('✅ Your decision has been recorded!');
+          window.showToast('✅ Your decision has been recorded!', 'success', 3000);
         }
         
         // Reload match history and notifications
         await loadMatchHistory();
         await loadNotifications();
+        await loadActiveSentMatch();
       } else {
-        alert(`❌ Error: ${result.error}`);
+        window.showToast(`❌ Error: ${result.error}`, 'error', 4000);
         if (result.error === 'Match has expired' || result.error === 'Match is no longer active') {
           setShowMatchModal(false);
           setCurrentMatch(null);
@@ -221,7 +259,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       }
     } catch (error) {
       console.error('Failed to reject match:', error);
-      alert('❌ Failed to reject match. Please try again.');
+      window.showToast('❌ Failed to reject match. Please try again.', 'error', 4000);
     }
   };
 
@@ -282,6 +320,9 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gray-900">The Future of Matchmaking ✨</h1>
         <p className="mt-3 text-gray-600 max-w-2xl mx-auto">Let the algorithm find who truly fits you.</p>
         <p className="mt-2 text-sm text-gray-500">Use the profile selector (top right) to test different users</p>
+        <p className="mt-1 text-xs text-gray-400">
+          {isUsingDatabaseUsers ? '✅ Matches are saved to database and persist across reloads' : '⚠️ Matches are stored in memory only and will be lost on reload'}
+        </p>
       </section>
 
       {/* Auth panel removed - authentication skipped */}
@@ -289,12 +330,42 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       {/* Primary action and status */}
       <div className="text-center mb-10">
         {!isOnline ? (
-          <button
-            onClick={goOnline}
-            className="px-8 py-4 font-semibold rounded-xl text-lg transition-all duration-200 shadow-lg bg-black text-white hover:bg-gray-800"
-          >
-            Go Online
-          </button>
+          <div className="space-y-3">
+            {activeSentMatch && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-lg">
+                    {activeSentMatch.matchedUser?.avatar?.emoji || '👤'}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-blue-900">Active Match Pending</h4>
+                    <p className="text-sm text-blue-700">
+                      Waiting for {activeSentMatch.matchedUser?.name || 'Unknown'} to respond
+                    </p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Sent {new Date(activeSentMatch.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={goOnline}
+              disabled={!!activeSentMatch}
+              className={`px-8 py-4 font-semibold rounded-xl text-lg transition-all duration-200 shadow-lg ${
+                activeSentMatch 
+                  ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+                  : 'bg-black text-white hover:bg-gray-800'
+              }`}
+            >
+              {activeSentMatch ? 'Match Pending...' : 'Match Me'}
+            </button>
+            {activeSentMatch && (
+              <p className="text-xs text-gray-500 text-center">
+                You already have an active match. Wait for a response or cancel your current match.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="space-y-4">
             {isMatching ? (
@@ -326,10 +397,22 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
           <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">Your Match History</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {matchHistory.slice(0, 6).map((match, index) => {
-              // Get the matched user's info
+              // Get the matched user's info - use match.matchedUser if available, otherwise search in users
               const matchedUserId = match.user1Id === currentUser.id ? match.user2Id : match.user1Id;
-              const matchedUser = users.find(u => u.id === matchedUserId);
-              const matchedUserName = matchedUser ? matchedUser.name : 'Unknown User';
+              const matchedUser = match.matchedUser || users.find(u => u.id === matchedUserId);
+              
+              // Debug logging
+              if (!matchedUser) {
+                console.log('🔍 Match history debug:', {
+                  matchId: match.id,
+                  currentUserId: currentUser.id,
+                  matchedUserId: matchedUserId,
+                  hasMatchedUser: !!match.matchedUser,
+                  availableUsers: users.map(u => u.id)
+                });
+              }
+              
+              const matchedUserName = matchedUser ? matchedUser.name : `User ${matchedUserId.slice(0, 8)}...`;
               const matchedUserAvatar = matchedUser ? matchedUser.avatar.emoji : '👤';
               
               // Check if user can still respond to this match
@@ -397,6 +480,9 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         isVisible={showNotifications}
         onClose={() => setShowNotifications(false)}
       />
+
+      {/* Toast Notifications */}
+      <ToastManager />
     </div>
   );
 };

@@ -19,6 +19,12 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       console.log('🔗 Attempting to connect to Supabase database...');
       
+      // First test the database connection
+      const connectionTest = await userService.testDatabaseConnection();
+      if (!connectionTest.success) {
+        throw new Error(`Database connection failed: ${connectionTest.error}`);
+      }
+      
       const users = await userService.getAllUsers();
       setDatabaseUsers(users);
       
@@ -29,10 +35,12 @@ export const AuthProvider = ({ children }) => {
       }
       
       console.log('✅ Database connection successful! Using real database users.');
+      console.log(`📊 Loaded ${users.length} users from database`);
     } catch (error) {
       console.error('❌ Failed to connect to database:', error);
       console.log('🔄 Falling back to fake users. Please check your Supabase configuration.');
       console.log('📋 Setup guide: See SUPABASE_SETUP.md for instructions');
+      console.log('🔧 Quick test: Run "node test-match-creation.js" to diagnose issues');
       
       // Fallback to fake users if database fails (for development)
       setDatabaseUsers(fakeUsers);
@@ -67,6 +75,9 @@ export const AuthProvider = ({ children }) => {
     refresh_token: 'mock-refresh-token'
   };
 
+  // Determine if we're using database users (not fake users)
+  const isUsingDatabaseUsers = databaseUsers.length > 0 && databaseUsers !== fakeUsers;
+
   const value = { 
     session, 
     user, 
@@ -75,7 +86,8 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser,
     databaseUsers,
     loadDatabaseUsers,
-    isUsingFakeUsers: databaseUsers === fakeUsers
+    isUsingFakeUsers: !isUsingDatabaseUsers,
+    isUsingDatabaseUsers
   };
   
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

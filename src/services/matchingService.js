@@ -10,9 +10,36 @@ export class MockMatchingService {
     this.matchHistory = [];
   }
 
+  // Check if user has an active sent match (one they initiated)
+  hasActiveSentMatch(userId) {
+    const activeSentMatch = this.matchHistory.find(match => 
+      match.user1Id === userId && 
+      match.status === 'pending' && 
+      match.user1Decision === 'pending'
+    );
+    return !!activeSentMatch;
+  }
+
+  // Get user's active sent match
+  getActiveSentMatch(userId) {
+    const activeSentMatch = this.matchHistory.find(match => 
+      match.user1Id === userId && 
+      match.status === 'pending' && 
+      match.user1Decision === 'pending'
+    );
+    return activeSentMatch || null;
+  }
+
   // Go online and start looking for matches
   async goOnline(userId) {
     console.log(`User ${userId} is now online`);
+    
+    // Check if user already has an active sent match
+    if (this.hasActiveSentMatch(userId)) {
+      console.log('❌ User already has an active sent match. Cannot create new match.');
+      return { success: false, error: 'You already have an active match pending. Wait for a response or cancel your current match.' };
+    }
+    
     this.onlineUsers.set(userId, {
       userId,
       isOnline: true,
@@ -255,8 +282,16 @@ export class MockMatchingService {
   createMatch(user1Id, user2Id, score, reasons) {
     const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Get the matched user data for the UI
-    const matchedUser = fakeUsers.find(u => u.id === user2Id);
+    // Get the matched user data for the UI - try fakeUsers first, then create fallback
+    let matchedUser = fakeUsers.find(u => u.id === user2Id);
+    if (!matchedUser) {
+      // Create a fallback user object if not found in fakeUsers
+      matchedUser = {
+        id: user2Id,
+        name: `User ${user2Id.slice(0, 8)}...`,
+        avatar: { emoji: '👤' }
+      };
+    }
     
     const match = {
       id: matchId,
@@ -515,18 +550,37 @@ export class MockMatchingService {
         if (match.user1Id === userId) {
           // Ensure matchedUser is included
           if (!match.matchedUser) {
+            // Try to find the matched user in fakeUsers first, then in database
             match.matchedUser = fakeUsers.find(u => u.id === match.user2Id);
+            if (!match.matchedUser) {
+              // If not found in fakeUsers, create a basic user object
+              match.matchedUser = {
+                id: match.user2Id,
+                name: `User ${match.user2Id.slice(0, 8)}...`,
+                avatar: { emoji: '👤' }
+              };
+            }
           }
           uniqueMatches.push(match);
         } else {
           // If the current user is user2, create a view from their perspective
+          let matchedUser = fakeUsers.find(u => u.id === match.user1Id);
+          if (!matchedUser) {
+            // If not found in fakeUsers, create a basic user object
+            matchedUser = {
+              id: match.user1Id,
+              name: `User ${match.user1Id.slice(0, 8)}...`,
+              avatar: { emoji: '👤' }
+            };
+          }
+          
           const userPerspectiveMatch = {
             ...match,
             user1Id: userId,
             user2Id: match.user1Id,
             user1Decision: match.user2Decision,
             user2Decision: match.user1Decision,
-            matchedUser: fakeUsers.find(u => u.id === match.user1Id)
+            matchedUser: matchedUser
           };
           uniqueMatches.push(userPerspectiveMatch);
         }
@@ -542,9 +596,91 @@ export const matchingService = new MockMatchingService();
 
 // Real Supabase matching service (for persistent data)
 export class SupabaseMatchingService {
+  // Check if user has an active sent match (one they initiated)
+  async hasActiveSentMatch(userId) {
+    try {
+      const { data: matches, error } = await supabase
+        .from('matches')
+        .select('id, status, user1_decision')
+        .eq('user1_id', userId)
+        .eq('status', 'pending')
+        .eq('user1_decision', 'pending');
+
+      if (error) {
+        console.error('Error checking active sent match:', error);
+        return false;
+      }
+
+      return matches && matches.length > 0;
+    } catch (error) {
+      console.error('Error in hasActiveSentMatch:', error);
+      return false;
+    }
+  }
+
+  // Get user's active sent match
+  async getActiveSentMatch(userId) {
+    try {
+      const { data: match, error } = await supabase
+        .from('matches')
+        .select(`
+          *,
+          user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
+        `)
+        .eq('user1_id', userId)
+        .eq('status', 'pending')
+        .eq('user1_decision', 'pending')
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows returned - no active sent match
+          return null;
+        }
+        console.error('Error getting active sent match:', error);
+        return null;
+      }
+
+      // Transform to match the expected format
+      return {
+        id: match.id,
+        user1Id: match.user1_id,
+        user2Id: match.user2_id,
+        user1Decision: match.user1_decision,
+        user2Decision: match.user2_decision,
+        matchScore: match.match_score,
+        matchReasons: match.match_reasons,
+        matchedUser: {
+          id: match.user2.user_id,
+          name: match.user2.name,
+          age: match.user2.age,
+          city: match.user2.city,
+          bio: match.user2.bio,
+          avatar: {
+            type: match.user2.avatar_type,
+            emoji: match.user2.avatar_emoji
+          }
+        },
+        createdAt: new Date(match.created_at),
+        status: match.status,
+        expiresAt: new Date(match.expires_at)
+      };
+    } catch (error) {
+      console.error('Error in getActiveSentMatch:', error);
+      return null;
+    }
+  }
+
   // Go online and start looking for matches
   async goOnline(userId) {
     console.log(`User ${userId} is now online`);
+    
+    // Check if user already has an active sent match
+    const hasActiveMatch = await this.hasActiveSentMatch(userId);
+    if (hasActiveMatch) {
+      console.log('❌ User already has an active sent match. Cannot create new match.');
+      return { success: false, error: 'You already have an active match pending. Wait for a response or cancel your current match.' };
+    }
     
     // Add user to online_users table
     const { error } = await supabase
@@ -563,7 +699,14 @@ export class SupabaseMatchingService {
       return { success: true, hasPendingMatches: true, pendingMatches };
     }
     
-    return { success: true, hasPendingMatches: false, pendingMatches: [] };
+    // Find new matches and create them in the database
+    const newMatches = await this.findMatches(userId);
+    if (newMatches.length > 0) {
+      console.log(`User ${userId} found ${newMatches.length} new matches`);
+      return { success: true, hasPendingMatches: false, pendingMatches: [], newMatches };
+    }
+    
+    return { success: true, hasPendingMatches: false, pendingMatches: [], newMatches: [] };
   }
 
   // Go offline
@@ -817,66 +960,81 @@ export class SupabaseMatchingService {
 
   // Create a match between two users
   async createMatch(user1Id, user2Id, score, reasons) {
+    console.log(`🗄️ Creating match in database: ${user1Id} <-> ${user2Id} (Score: ${score})`);
+    
     // Ensure user1_id < user2_id for the constraint
     const [user1, user2] = user1Id < user2Id ? [user1Id, user2Id] : [user2Id, user1Id];
     
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
     
-    const { data: match, error } = await supabase
-      .from('matches')
-      .insert({
-        user1_id: user1,
-        user2_id: user2,
-        match_score: score,
-        match_reasons: reasons,
-        user1_decision: user1 === user1Id ? 'pending' : 'pending',
-        user2_decision: user2 === user1Id ? 'pending' : 'pending',
-        status: 'pending',
-        expires_at: expiresAt.toISOString()
-      })
-      .select(`
-        *,
-        user1:profiles!matches_user1_id_fkey(name, age, city, bio, avatar_type, avatar_emoji),
-        user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
-      `)
-      .single();
+    try {
+      const { data: match, error } = await supabase
+        .from('matches')
+        .insert({
+          user1_id: user1,
+          user2_id: user2,
+          match_score: score,
+          match_reasons: reasons,
+          user1_decision: user1 === user1Id ? 'pending' : 'pending',
+          user2_decision: user2 === user1Id ? 'pending' : 'pending',
+          status: 'pending',
+          expires_at: expiresAt.toISOString()
+        })
+        .select(`
+          *,
+          user1:profiles!matches_user1_id_fkey(name, age, city, bio, avatar_type, avatar_emoji),
+          user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
+        `)
+        .single();
 
-    if (error) {
-      console.error('Error creating match:', error);
+      if (error) {
+        console.error('❌ Database error creating match:', error);
+        console.error('Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        return null;
+      }
+
+      console.log('✅ Match created successfully in database:', match.id);
+      
+      // Get the matched user data for the UI
+      const matchedUser = user1 === user1Id ? match.user2 : match.user1;
+      
+      const matchObj = {
+        id: match.id,
+        user1Id: match.user1_id,
+        user2Id: match.user2_id,
+        user1Decision: match.user1_decision,
+        user2Decision: match.user2_decision,
+        matchScore: match.match_score,
+        matchReasons: match.match_reasons,
+        matchedUser: {
+          id: matchedUser.user_id,
+          name: matchedUser.name,
+          age: matchedUser.age,
+          city: matchedUser.city,
+          bio: matchedUser.bio,
+          avatar_type: matchedUser.avatar_type,
+          avatar_emoji: matchedUser.avatar_emoji
+        },
+        createdAt: new Date(match.created_at),
+        status: match.status,
+        expiresAt: new Date(match.expires_at)
+      };
+
+      console.log(`✅ Match object created: ${user1} <-> ${user2} (Score: ${score}) - Status: ${match.status}`);
+      
+      // Notify both users about the match
+      await this.notifyBothUsers(user1, user2, matchObj);
+
+      return matchObj;
+    } catch (dbError) {
+      console.error('❌ Database connection error:', dbError);
       return null;
     }
-
-    // Get the matched user data for the UI
-    const matchedUser = user1 === user1Id ? match.user2 : match.user1;
-    
-    const matchObj = {
-      id: match.id,
-      user1Id: match.user1_id,
-      user2Id: match.user2_id,
-      user1Decision: match.user1_decision,
-      user2Decision: match.user2_decision,
-      matchScore: match.match_score,
-      matchReasons: match.match_reasons,
-      matchedUser: {
-        id: matchedUser.user_id,
-        name: matchedUser.name,
-        age: matchedUser.age,
-        city: matchedUser.city,
-        bio: matchedUser.bio,
-        avatar_type: matchedUser.avatar_type,
-        avatar_emoji: matchedUser.avatar_emoji
-      },
-      createdAt: new Date(match.created_at),
-      status: match.status,
-      expiresAt: new Date(match.expires_at)
-    };
-
-    console.log(`Match created: ${user1} <-> ${user2} (Score: ${score}) - Status: ${match.status}`);
-    
-    // Notify both users about the match
-    await this.notifyBothUsers(user1, user2, matchObj);
-
-    return matchObj;
   }
 
   // Notify both users about a match
@@ -915,19 +1073,24 @@ export class SupabaseMatchingService {
 
   // Get notifications for a user
   async getNotifications(userId) {
-    const { data: notifications, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_read', false)
-      .order('created_at', { ascending: false });
+    try {
+      const { data: notifications, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_read', false)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching notifications:', error);
+      if (error) {
+        console.error('Error fetching notifications:', error);
+        return [];
+      }
+
+      return notifications || [];
+    } catch (error) {
+      console.error('Error in getNotifications:', error);
       return [];
     }
-
-    return notifications || [];
   }
 
   // Clear notifications for a user
@@ -945,26 +1108,37 @@ export class SupabaseMatchingService {
 
   // Get match history (each user sees only their own perspective)
   async getMatchHistory(userId) {
-    const { data: matches, error } = await supabase
-      .from('matches')
-      .select(`
-        *,
-        user1:profiles!matches_user1_id_fkey(name, age, city, bio, avatar_type, avatar_emoji),
-        user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
-      `)
-      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching match history:', error);
-      return [];
-    }
-
-    // For each unique match pair, show only the match where the current user is user1
-    const uniqueMatches = [];
-    const processedPairs = new Set();
+    console.log(`📋 Fetching match history from database for user: ${userId}`);
     
-    matches.forEach(match => {
+    try {
+      const { data: matches, error } = await supabase
+        .from('matches')
+        .select(`
+          *,
+          user1:profiles!matches_user1_id_fkey(name, age, city, bio, avatar_type, avatar_emoji),
+          user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
+        `)
+        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Error fetching match history:', error);
+        console.error('Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        return [];
+      }
+
+      console.log(`✅ Found ${matches.length} matches in database for user ${userId}`);
+
+      // For each unique match pair, show only the match where the current user is user1
+      const uniqueMatches = [];
+      const processedPairs = new Set();
+      
+      matches.forEach(match => {
       // Create a unique key for the match pair (sorted to avoid duplicates)
       const pairKey = [match.user1_id, match.user2_id].sort().join('_');
       
@@ -973,6 +1147,22 @@ export class SupabaseMatchingService {
         
         // Show the match from the current user's perspective
         if (match.user1_id === userId) {
+          const matchedUserData = match.user2 ? {
+            id: match.user2.user_id,
+            name: match.user2.name,
+            age: match.user2.age,
+            city: match.user2.city,
+            bio: match.user2.bio,
+            avatar: {
+              type: match.user2.avatar_type,
+              emoji: match.user2.avatar_emoji
+            }
+          } : {
+            id: match.user2_id,
+            name: `User ${match.user2_id.slice(0, 8)}...`,
+            avatar: { emoji: '👤' }
+          };
+
           uniqueMatches.push({
             id: match.id,
             user1Id: match.user1_id,
@@ -981,21 +1171,29 @@ export class SupabaseMatchingService {
             user2Decision: match.user2_decision,
             matchScore: match.match_score,
             matchReasons: match.match_reasons,
-            matchedUser: {
-              id: match.user2.user_id,
-              name: match.user2.name,
-              age: match.user2.age,
-              city: match.user2.city,
-              bio: match.user2.bio,
-              avatar_type: match.user2.avatar_type,
-              avatar_emoji: match.user2.avatar_emoji
-            },
+            matchedUser: matchedUserData,
             createdAt: new Date(match.created_at),
             status: match.status,
             expiresAt: new Date(match.expires_at)
           });
         } else {
           // If the current user is user2, create a view from their perspective
+          const matchedUserData = match.user1 ? {
+            id: match.user1.user_id,
+            name: match.user1.name,
+            age: match.user1.age,
+            city: match.user1.city,
+            bio: match.user1.bio,
+            avatar: {
+              type: match.user1.avatar_type,
+              emoji: match.user1.avatar_emoji
+            }
+          } : {
+            id: match.user1_id,
+            name: `User ${match.user1_id.slice(0, 8)}...`,
+            avatar: { emoji: '👤' }
+          };
+
           uniqueMatches.push({
             id: match.id,
             user1Id: userId,
@@ -1004,24 +1202,20 @@ export class SupabaseMatchingService {
             user2Decision: match.user1_decision,
             matchScore: match.match_score,
             matchReasons: match.match_reasons,
-            matchedUser: {
-              id: match.user1.user_id,
-              name: match.user1.name,
-              age: match.user1.age,
-              city: match.user1.city,
-              bio: match.user1.bio,
-              avatar_type: match.user1.avatar_type,
-              avatar_emoji: match.user1.avatar_emoji
-            },
+            matchedUser: matchedUserData,
             createdAt: new Date(match.created_at),
             status: match.status,
             expiresAt: new Date(match.expires_at)
           });
         }
       }
-    });
-    
-    return uniqueMatches;
+      });
+      
+      return uniqueMatches;
+    } catch (dbError) {
+      console.error('❌ Database connection error in getMatchHistory:', dbError);
+      return [];
+    }
   }
 
   // Make a decision on a match
@@ -1137,8 +1331,13 @@ const mockService = new MockMatchingService();
 const supabaseService = new SupabaseMatchingService();
 
 // Function to get the appropriate service
-export const getMatchingService = (isUsingFakeUsers = false) => {
-  return isUsingFakeUsers ? mockService : supabaseService;
+export const getMatchingService = (isUsingFakeUsers = false, isUsingDatabaseUsers = false) => {
+  // If we have database users, always use Supabase service for persistence
+  if (isUsingDatabaseUsers) {
+    return supabaseService;
+  }
+  // Otherwise use mock service for fake users
+  return mockService;
 };
 
 // Default export (will be overridden by context)
