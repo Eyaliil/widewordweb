@@ -1,27 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-// AuthPanel removed - authentication skipped
 import MatchModal from './MatchModal';
 import NotificationCenter from './NotificationCenter';
 import ToastManager from './ToastManager';
-// Authentication removed - no longer needed
 import { loadPublicProfiles } from '../services/profileService';
 import { getMatchingService } from '../services/matchingService';
 import { userService } from '../services/userService';
 
+// Constants
+const MATCH_EXPIRY_HOURS = 24;
+const TOAST_DURATIONS = {
+  SUCCESS: 5000,
+  ERROR: 4000,
+  WARNING: 3000,
+  INFO: 3000
+};
+
 const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProfile, onEditPreferences }) => {
+  // Auth context
   const { user, currentUser, databaseUsers, isUsingFakeUsers, isUsingDatabaseUsers } = useAuth();
+  
+  // Matching service
   const matchingService = getMatchingService(isUsingFakeUsers, isUsingDatabaseUsers);
   
-  // Debug logging for service selection
-  useEffect(() => {
-    console.log('🔧 Matching service debug:', {
-      isUsingFakeUsers,
-      isUsingDatabaseUsers,
-      serviceType: isUsingDatabaseUsers ? 'SupabaseMatchingService (Persistent)' : 'MockMatchingService (Memory only)',
-      currentUser: currentUser?.name
-    });
-  }, [isUsingFakeUsers, isUsingDatabaseUsers, currentUser]);
+  // State management
   const [users, setUsers] = useState([]);
   const [currentMatch, setCurrentMatch] = useState(null);
   const [showMatchModal, setShowMatchModal] = useState(false);
@@ -31,94 +33,341 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   const [notificationCount, setNotificationCount] = useState(0);
   const [activeSentMatch, setActiveSentMatch] = useState(null);
 
-  // Load database users
-  useEffect(() => {
-    let isCancelled = false;
-    const load = async () => {
-      try {
-        const data = await userService.getAllUsers();
-        if (!isCancelled) setUsers(data);
-      } catch (e) {
-        console.error('Failed to load users:', e);
-      }
-    };
-    load();
-    return () => { isCancelled = true; };
-  }, []);
-
-  // Profile completion check removed for testing
-
-  // Load active sent match
-  const loadActiveSentMatch = async () => {
-    if (!currentUser) return;
-    
-    try {
-      const sentMatch = await matchingService.getActiveSentMatch(currentUser.id);
-      setActiveSentMatch(sentMatch);
-    } catch (error) {
-      console.error('Failed to load active sent match:', error);
-      setActiveSentMatch(null);
+  // Helper Functions
+  /**
+   * Ensures matchedUser data is populated for a match object
+   * @param {Object} match - Match object
+   * @returns {Object} Match object with populated matchedUser
+   */
+  const populateMatchedUser = useCallback((match) => {
+    if (match.matchedUser) {
+      return match;
     }
-  };
+    
+    const matchedUserId = match.user1Id === currentUser.id ? match.user2Id : match.user1Id;
+    
+    // Debug logging
+    console.log('🔍 populateMatchedUser debug:', {
+      matchId: match.id,
+      currentUserId: currentUser.id,
+      matchedUserId,
+      databaseUsersCount: databaseUsers.length,
+      databaseUsersIds: databaseUsers.map(u => u.id),
+      databaseUsersNames: databaseUsers.map(u => u.name)
+    });
+    
+    const matchedUser = databaseUsers.find(u => u.id === matchedUserId);
+    
+    if (matchedUser) {
+      console.log('✅ Found matchedUser:', matchedUser);
+      return { ...match, matchedUser };
+    } else {
+      console.log('❌ MatchedUser not found, creating fallback');
+      const fallbackMatchedUser = {
+        id: matchedUserId,
+        name: `User ${matchedUserId.slice(0, 8)}...`,
+        avatar: { emoji: '👤' }
+      };
+      return { ...match, matchedUser: fallbackMatchedUser };
+    }
+  }, [currentUser, databaseUsers]);
 
-  // Organize matches by type for display
-  const organizeMatches = () => {
-    if (!matchHistory.length) return { sentMatches: [], receivedMatches: [], rejectedByMe: [], rejectedByThem: [] };
-
+  /**
+   * Organizes matches into categories (sent, received, rejected)
+   * @returns {Object} Organized match categories
+   */
+  const organizeMatches = useCallback(() => {
     const sentMatches = [];
     const receivedMatches = [];
+    const mutualMatches = [];
     const rejectedByMe = [];
     const rejectedByThem = [];
 
     matchHistory.forEach(match => {
-      const isUser1 = match.user1Id === currentUser.id;
-      const userDecision = isUser1 ? match.user1Decision : match.user2Decision;
-      const otherUserDecision = isUser1 ? match.user2Decision : match.user1Decision;
-      const isPending = match.status === 'pending';
-      const isRejected = match.status === 'rejected';
-      const isMutualMatch = match.status === 'mutual_match';
-      const isExpired = match.status === 'expired';
-
-      if (isPending || isMutualMatch) {
-        // Active matches - organize by who initiated vs who received
-        if (isUser1) {
-          // Current user is user1 (the one who sent the match)
+      const isCurrentUserSender = match.user1Id === currentUser.id;
+      
+      if (match.status === 'pending') {
+        if (isCurrentUserSender) {
           sentMatches.push(match);
         } else {
-          // Current user is user2 (the one who received the match)
           receivedMatches.push(match);
         }
-      } else if (isRejected || isExpired) {
-        // Rejected matches - organize by who made the rejection
+      } else if (match.status === 'mutual_match') {
+        // Both users accepted - this is a successful match
+        mutualMatches.push(match);
+      } else if (match.status === 'rejected' || match.status === 'expired') {
+        const userDecision = isCurrentUserSender ? match.user1Decision : match.user2Decision;
+        const otherUserDecision = isCurrentUserSender ? match.user2Decision : match.user1Decision;
+        
         if (userDecision === 'rejected') {
-          // Current user made the rejection
           rejectedByMe.push(match);
-        } else if (otherUserDecision === 'rejected' || isExpired) {
-          // Other user made the rejection or match expired
+        } else if (otherUserDecision === 'rejected') {
           rejectedByThem.push(match);
         }
       }
     });
 
-    return { sentMatches, receivedMatches, rejectedByMe, rejectedByThem };
-  };
+    return { sentMatches, receivedMatches, mutualMatches, rejectedByMe, rejectedByThem };
+  }, [matchHistory, currentUser]);
 
-  // Render a match card
-  const renderMatchCard = (match, showActions = true) => {
+  // Data Loading Functions
+  /**
+   * Loads all available users from the service
+   */
+  const loadUsers = useCallback(async () => {
+    let isCancelled = false;
+    try {
+      const data = await userService.getAllUsers();
+      if (!isCancelled) setUsers(data);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    }
+    return () => { isCancelled = true; };
+  }, []);
+
+  /**
+   * Loads match history for the current user
+   */
+  const loadMatchHistory = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    try {
+      const history = await matchingService.getMatchHistory(currentUser.id);
+      setMatchHistory(history);
+    } catch (error) {
+      console.error('Failed to load match history:', error);
+    }
+  }, [currentUser, matchingService]);
+
+  /**
+   * Loads notifications for the current user
+   */
+  const loadNotifications = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    try {
+      const notifications = await matchingService.getNotifications(currentUser.id);
+      setNotificationCount(notifications.length);
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    }
+  }, [currentUser, matchingService]);
+
+  /**
+   * Loads active sent match for the current user
+   */
+  const loadActiveSentMatch = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    try {
+      const activeMatch = await matchingService.getActiveSentMatch(currentUser.id);
+      setActiveSentMatch(activeMatch);
+    } catch (error) {
+      console.error('Failed to load active sent match:', error);
+    }
+  }, [currentUser, matchingService]);
+
+  // Match Actions
+  /**
+   * Handles going online and finding matches
+   */
+  const goOnline = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    setIsMatching(true);
+    
+    try {
+      const result = await matchingService.goOnline(currentUser.id);
+      
+      if (result.success) {
+        if (result.activeSentMatch) {
+          // User already has a pending sent match
+          window.showToast(
+            '⚠️ You already have a pending match. Wait for a response or it to expire before matching again.',
+            'warning',
+            TOAST_DURATIONS.WARNING
+          );
+          setCurrentMatch(populateMatchedUser(result.activeSentMatch));
+          setShowMatchModal(true);
+        } else if (result.newMatches && result.newMatches.length > 0) {
+          // Show new matches found
+          console.log(`Found ${result.newMatches.length} new matches`);
+          const bestMatch = result.newMatches[0];
+          console.log('New match:', bestMatch);
+          console.log('Available databaseUsers:', databaseUsers);
+          console.log('Current user:', currentUser);
+          setCurrentMatch(populateMatchedUser(bestMatch));
+          setShowMatchModal(true);
+          
+          // Reload data after a short delay
+          setTimeout(() => {
+            loadMatchHistory();
+            loadNotifications();
+            loadActiveSentMatch();
+          }, 1000);
+        } else {
+          // No matches found
+          window.showToast('No new matches found right now. Try again later!', 'info', TOAST_DURATIONS.INFO);
+        }
+        setIsOnline(true);
+      } else {
+        window.showToast(`❌ Error: ${result.error}`, 'error', TOAST_DURATIONS.ERROR);
+      }
+    } catch (error) {
+      console.error('Failed to go online:', error);
+      window.showToast('❌ Failed to go online. Please try again.', 'error', TOAST_DURATIONS.ERROR);
+    } finally {
+      setIsMatching(false);
+    }
+  }, [currentUser, matchingService, populateMatchedUser, databaseUsers, loadMatchHistory, loadNotifications, loadActiveSentMatch]);
+
+  /**
+   * Handles going offline
+   */
+  const goOffline = useCallback(async () => {
+    setIsOnline(false);
+    setIsMatching(false);
+    setShowMatchModal(false);
+    setCurrentMatch(null);
+    
+    try {
+      await matchingService.goOffline(currentUser.id);
+    } catch (error) {
+      console.error('Failed to go offline:', error);
+    }
+  }, [currentUser, matchingService]);
+
+  /**
+   * Handles accepting a match
+   */
+  const handleAcceptMatch = useCallback(async () => {
+    if (!currentMatch?.id || !currentUser?.id) return;
+    
+    try {
+      const result = await matchingService.makeDecision(currentMatch.id, currentUser.id, 'accepted');
+      
+      if (result.success) {
+        setCurrentMatch(populateMatchedUser(result.match));
+        
+        // Handle different match outcomes
+        if (result.match.status === 'mutual_match') {
+          window.showToast('🎉 Mutual match! You both accepted each other!', 'success', TOAST_DURATIONS.SUCCESS);
+          setShowMatchModal(false);
+          setCurrentMatch(null);
+        } else if (result.match.status === 'rejected') {
+          window.showToast('❌ Match ended - different decisions were made', 'warning', TOAST_DURATIONS.WARNING);
+          setShowMatchModal(false);
+          setCurrentMatch(null);
+        } else if (result.match.status === 'expired') {
+          window.showToast('⏰ Match has expired', 'warning', TOAST_DURATIONS.WARNING);
+          setShowMatchModal(false);
+          setCurrentMatch(null);
+        } else {
+          window.showToast('✅ Your decision has been recorded! Waiting for the other person...', 'success', TOAST_DURATIONS.SUCCESS);
+        }
+        
+        // Reload data
+        await loadMatchHistory();
+        await loadNotifications();
+        await loadActiveSentMatch();
+      } else {
+        window.showToast(`❌ Error: ${result.error}`, 'error', TOAST_DURATIONS.ERROR);
+        if (result.error === 'Match has expired' || result.error === 'Match is no longer active') {
+          setShowMatchModal(false);
+          setCurrentMatch(null);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to accept match:', error);
+      window.showToast('❌ Failed to accept match. Please try again.', 'error', TOAST_DURATIONS.ERROR);
+    }
+  }, [currentMatch, currentUser, matchingService, populateMatchedUser, loadMatchHistory, loadNotifications, loadActiveSentMatch]);
+
+  /**
+   * Handles rejecting a match
+   */
+  const handleRejectMatch = useCallback(async () => {
+    if (!currentMatch?.id || !currentUser?.id) return;
+    
+    try {
+      const result = await matchingService.makeDecision(currentMatch.id, currentUser.id, 'rejected');
+      
+      if (result.success) {
+        setCurrentMatch(populateMatchedUser(result.match));
+        
+        // Handle different match outcomes
+        if (result.match.status === 'mutual_match') {
+          window.showToast('🎉 Mutual match! You both accepted each other!', 'success', TOAST_DURATIONS.SUCCESS);
+          setShowMatchModal(false);
+          setCurrentMatch(null);
+        } else if (result.match.status === 'rejected') {
+          window.showToast('❌ Match ended - different decisions were made', 'warning', TOAST_DURATIONS.WARNING);
+          setShowMatchModal(false);
+          setCurrentMatch(null);
+        } else if (result.match.status === 'expired') {
+          window.showToast('⏰ Match has expired', 'warning', TOAST_DURATIONS.WARNING);
+          setShowMatchModal(false);
+          setCurrentMatch(null);
+        } else {
+          window.showToast('✅ Your decision has been recorded!', 'success', TOAST_DURATIONS.INFO);
+        }
+        
+        // Reload data
+        await loadMatchHistory();
+        await loadNotifications();
+        await loadActiveSentMatch();
+      } else {
+        window.showToast(`❌ Error: ${result.error}`, 'error', TOAST_DURATIONS.ERROR);
+        if (result.error === 'Match has expired' || result.error === 'Match is no longer active') {
+          setShowMatchModal(false);
+          setCurrentMatch(null);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to reject match:', error);
+      window.showToast('❌ Failed to reject match. Please try again.', 'error', TOAST_DURATIONS.ERROR);
+    }
+  }, [currentMatch, currentUser, matchingService, populateMatchedUser, loadMatchHistory, loadNotifications, loadActiveSentMatch]);
+
+  /**
+   * Handles closing the match modal
+   */
+  const handleCloseMatchModal = useCallback(() => {
+    setShowMatchModal(false);
+    setCurrentMatch(null);
+  }, []);
+
+  /**
+   * Handles clicking on a match in history
+   */
+  const handleMatchHistoryClick = useCallback(async (match) => {
+    const userDecision = match.user1Id === currentUser.id ? match.user1Decision : match.user2Decision;
+    
+    if (match.status === 'pending' && userDecision === 'pending') {
+      console.log('Opening match for decision:', match);
+      setCurrentMatch(populateMatchedUser(match));
+      setShowMatchModal(true);
+    } else {
+      console.log('Match is completed or user already decided');
+    }
+  }, [currentUser, populateMatchedUser]);
+
+  // UI Helper Functions
+  /**
+   * Renders a match card
+   * @param {Object} match - Match object
+   * @param {boolean} showActions - Whether to show action buttons
+   * @returns {JSX.Element} Match card component
+   */
+  const renderMatchCard = useCallback((match, showActions = true) => {
     const matchedUserId = match.user1Id === currentUser.id ? match.user2Id : match.user1Id;
     const matchedUser = match.matchedUser || users.find(u => u.id === matchedUserId);
     const matchedUserName = matchedUser ? matchedUser.name : `User ${matchedUserId.slice(0, 8)}...`;
     const matchedUserAvatar = matchedUser ? (matchedUser.avatar?.emoji || matchedUser.avatar_emoji || '👤') : '👤';
     
-    
-    
-    // Check if user can still respond to this match
     const userDecision = match.user1Id === currentUser.id ? match.user1Decision : match.user2Decision;
     const canRespond = match.status === 'pending' && userDecision === 'pending';
-    
-    // Determine if this is a sent match or received match
     const isSentMatch = match.user1Id === currentUser.id;
-    const isReceivedMatch = match.user2Id === currentUser.id;
     
     return (
       <div 
@@ -132,7 +381,6 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
           if (canRespond && showActions) {
             handleMatchHistoryClick(match);
           } else {
-            // For non-pending matches, show match details or allow viewing
             setCurrentMatch(populateMatchedUser(match));
             setShowMatchModal(true);
           }
@@ -146,6 +394,8 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
             <h4 className="font-medium text-gray-800">{matchedUserName}</h4>
             <p className="text-sm text-gray-500">{match.matchScore}% compatibility</p>
           </div>
+          
+          {/* Status indicators */}
           {canRespond && showActions && (
             <div className="ml-auto">
               <span className="px-2 py-1 bg-pink-100 text-pink-700 rounded-full text-xs font-medium animate-pulse">
@@ -182,6 +432,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
             </div>
           )}
         </div>
+        
         <div className="text-xs text-gray-600">
           <div className="mb-2">
             <p className="font-medium text-gray-700">Match Status:</p>
@@ -216,382 +467,125 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         </div>
       </div>
     );
-  };
+  }, [currentUser, users, handleMatchHistoryClick, populateMatchedUser]);
 
-  // Helper function to ensure matchedUser is populated
-  const populateMatchedUser = (match) => {
-    if (match.matchedUser) {
-      return match; // Already has matchedUser
-    }
-    
-    // Determine the matched user ID
-    const matchedUserId = match.user1Id === currentUser.id ? match.user2Id : match.user1Id;
-    
-    // Debug logging
-    console.log('🔍 populateMatchedUser debug:', {
-      matchId: match.id,
-      currentUserId: currentUser.id,
-      matchedUserId,
-      databaseUsersCount: databaseUsers.length,
-      databaseUsersIds: databaseUsers.map(u => u.id),
-      databaseUsersNames: databaseUsers.map(u => u.name)
+  // Effects
+  useEffect(() => {
+    console.log('🔧 Matching service debug:', {
+      isUsingFakeUsers,
+      isUsingDatabaseUsers,
+      serviceType: isUsingDatabaseUsers ? 'SupabaseMatchingService (Persistent)' : 'MockMatchingService (Memory only)',
+      currentUser: currentUser?.name
     });
-    
-    // Find the matched user in the databaseUsers array (from AuthContext)
-    const matchedUser = databaseUsers.find(u => u.id === matchedUserId);
-    
-    if (matchedUser) {
-      console.log('✅ Found matchedUser:', matchedUser);
-      return { ...match, matchedUser };
-    } else {
-      console.log('❌ MatchedUser not found, creating fallback');
-      // Create a fallback matchedUser
-      const fallbackMatchedUser = {
-        id: matchedUserId,
-        name: `User ${matchedUserId.slice(0, 8)}...`,
-        avatar: { emoji: '👤' }
-      };
-      return { ...match, matchedUser: fallbackMatchedUser };
-    }
-  };
+  }, [isUsingFakeUsers, isUsingDatabaseUsers, currentUser]);
 
-  // Load match history and notifications when user changes
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
   useEffect(() => {
     if (currentUser) {
       loadMatchHistory();
       loadNotifications();
       loadActiveSentMatch();
     }
-  }, [currentUser]);
+  }, [currentUser, loadMatchHistory, loadNotifications, loadActiveSentMatch]);
 
-  // Check for new notifications periodically when online
   useEffect(() => {
     if (isOnline && currentUser) {
       const interval = setInterval(() => {
         loadNotifications();
-      }, 2000); // Check every 2 seconds
-
+      }, 5000);
       return () => clearInterval(interval);
     }
-  }, [isOnline, currentUser]);
+  }, [isOnline, currentUser, loadNotifications]);
 
-  const loadMatchHistory = async () => {
-    try {
-      const history = await matchingService.getMatchHistory(currentUser.id);
-      setMatchHistory(history);
-    } catch (error) {
-      console.error('Failed to load match history:', error);
-    }
-  };
-
-  const loadNotifications = async () => {
-    try {
-      const notifications = await matchingService.getNotifications(currentUser.id);
-      setNotificationCount(notifications.length);
-    } catch (error) {
-      console.error('Failed to load notifications:', error);
-    }
-  };
-
-  const goOnline = async () => {
-    // Skip profile completion check for testing
-    setIsOnline(true);
-    setIsMatching(true);
-    
-    try {
-      // Go online in the matching service
-      const result = await matchingService.goOnline(currentUser.id);
-      
-      // Check if there's an error (like already having an active sent match)
-      if (!result.success) {
-        window.showToast(result.error, 'warning', 4000);
-        setIsOnline(false);
-        setIsMatching(false);
-        return;
-      }
-      
-      // Check if there are pending matches waiting for decision
-      if (result.hasPendingMatches && result.pendingMatches.length > 0) {
-        console.log(`Found ${result.pendingMatches.length} pending matches`);
-        // Show the first pending match
-        const pendingMatch = result.pendingMatches[0];
-        console.log('Pending match:', pendingMatch);
-        console.log('Match decisions:', {
-          user1Decision: pendingMatch.user1Decision,
-          user2Decision: pendingMatch.user2Decision,
-          status: pendingMatch.status
-        });
-        setCurrentMatch(populateMatchedUser(pendingMatch));
-        setShowMatchModal(true);
-        setIsMatching(false);
-      } else if (result.newMatches && result.newMatches.length > 0) {
-        // Show the new matches found
-        console.log(`Found ${result.newMatches.length} new matches`);
-        const bestMatch = result.newMatches[0];
-        console.log('New match:', bestMatch);
-        console.log('Available databaseUsers:', databaseUsers);
-        console.log('Current user:', currentUser);
-        setCurrentMatch(populateMatchedUser(bestMatch));
-        setShowMatchModal(true);
-        
-        // Reload notifications to show the new match notification
-        setTimeout(() => {
-          loadMatchHistory();
-          loadNotifications();
-          loadActiveSentMatch();
-        }, 1000);
-        
-        setIsMatching(false);
-      } else {
-        // No matches found
-        console.log('No matches found');
-        setIsMatching(false);
-        // Show a brief message to the user
-        setTimeout(() => {
-          window.showToast('No matches found at the moment. Keep checking back!', 'info', 4000);
-        }, 500);
-      }
-      
-    } catch (error) {
-      console.error('Failed to go online:', error);
-      setIsMatching(false);
-    }
-  };
-
-  const goOffline = async () => {
-    setIsOnline(false);
-    setIsMatching(false);
-    setShowMatchModal(false);
-    setCurrentMatch(null);
-    
-    try {
-      await matchingService.goOffline(currentUser.id);
-    } catch (error) {
-      console.error('Failed to go offline:', error);
-    }
-  };
-
-  const handleAcceptMatch = async () => {
-    if (!currentMatch) return;
-    
-    try {
-      const result = await matchingService.makeDecision(currentMatch.id, currentUser.id, 'accepted');
-      
-      if (result.success) {
-        // Update the current match with the new decision
-        setCurrentMatch(populateMatchedUser(result.match));
-        
-        // Check match status
-        if (result.match.status === 'mutual_match') {
-          window.showToast('🎉 Mutual match! You both accepted each other!', 'success', 5000);
-          setShowMatchModal(false);
-          setCurrentMatch(null);
-        } else if (result.match.status === 'rejected') {
-          window.showToast('❌ Match ended - different decisions were made', 'warning', 4000);
-          setShowMatchModal(false);
-          setCurrentMatch(null);
-        } else if (result.match.status === 'expired') {
-          window.showToast('⏰ Match has expired', 'warning', 3000);
-          setShowMatchModal(false);
-          setCurrentMatch(null);
-        } else {
-          window.showToast('✅ Your decision has been recorded! Waiting for the other person...', 'success', 4000);
-        }
-        
-        // Reload match history and notifications
-        await loadMatchHistory();
-        await loadNotifications();
-        await loadActiveSentMatch();
-      } else {
-        window.showToast(`❌ Error: ${result.error}`, 'error', 4000);
-        if (result.error === 'Match has expired' || result.error === 'Match is no longer active') {
-          setShowMatchModal(false);
-          setCurrentMatch(null);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to accept match:', error);
-      window.showToast('❌ Failed to accept match. Please try again.', 'error', 4000);
-    }
-  };
-
-  const handleRejectMatch = async () => {
-    if (!currentMatch) return;
-    
-    try {
-      const result = await matchingService.makeDecision(currentMatch.id, currentUser.id, 'rejected');
-      
-      if (result.success) {
-        // Update the current match with the new decision
-        setCurrentMatch(populateMatchedUser(result.match));
-        
-        // Check match status
-        if (result.match.status === 'mutual_match') {
-          window.showToast('🎉 Mutual match! You both accepted each other!', 'success', 5000);
-          setShowMatchModal(false);
-          setCurrentMatch(null);
-        } else if (result.match.status === 'rejected') {
-          window.showToast('❌ Match ended - different decisions were made', 'warning', 4000);
-          setShowMatchModal(false);
-          setCurrentMatch(null);
-        } else if (result.match.status === 'expired') {
-          window.showToast('⏰ Match has expired', 'warning', 3000);
-          setShowMatchModal(false);
-          setCurrentMatch(null);
-        } else {
-          window.showToast('✅ Your decision has been recorded!', 'success', 3000);
-        }
-        
-        // Reload match history and notifications
-        await loadMatchHistory();
-        await loadNotifications();
-        await loadActiveSentMatch();
-      } else {
-        window.showToast(`❌ Error: ${result.error}`, 'error', 4000);
-        if (result.error === 'Match has expired' || result.error === 'Match is no longer active') {
-          setShowMatchModal(false);
-          setCurrentMatch(null);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to reject match:', error);
-      window.showToast('❌ Failed to reject match. Please try again.', 'error', 4000);
-    }
-  };
-
-  const handleCloseMatchModal = () => {
-    setShowMatchModal(false);
-    setCurrentMatch(null);
-  };
-
-  const handleMatchHistoryClick = async (match) => {
-    // Check if this match is still pending and user hasn't decided yet
-    const userDecision = match.user1Id === currentUser.id ? match.user1Decision : match.user2Decision;
-    
-    if (match.status === 'pending' && userDecision === 'pending') {
-      // User can still respond to this match
-      console.log('Opening match for decision:', match);
-      setCurrentMatch(populateMatchedUser(match));
-      setShowMatchModal(true);
-    } else {
-      // Match is completed or user already decided
-      console.log('Match is completed or user already decided');
-    }
-  };
+  // Render
+  const { sentMatches, receivedMatches, mutualMatches, rejectedByMe, rejectedByThem } = organizeMatches();
+  const hasActiveSentMatch = activeSentMatch !== null;
 
   return (
-    <div className="max-w-6xl mx-auto min-h-screen overflow-hidden px-4">
-      {/* Top navigation / status bar */}
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-        <div className="py-4">
-          <div className="flex flex-col items-end gap-2">
-            {user && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-xs">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
-                <span className="hidden md:inline">Welcome</span>
-                <span className="font-medium truncate max-w-[10rem]">{user.user_metadata?.name || 'User'}</span>
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
+      <ToastManager />
+      
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center text-2xl">
+                {currentUser?.avatar?.emoji || '👤'}
               </div>
-            )}
-            <div className="flex items-center gap-2">
-              <button 
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">{currentUser?.name || 'User'}</h1>
+                <p className="text-gray-600">
+                  {isOnline ? '🟢 Online' : '🔴 Offline'} • {matchHistory.length} matches
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              <button
                 onClick={() => setShowNotifications(true)}
-                className="relative px-3 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors"
+                className="relative p-2 text-gray-600 hover:text-gray-800 transition-colors"
               >
-                🔔 Notifications
+                🔔
                 {notificationCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                     {notificationCount}
                   </span>
                 )}
               </button>
-              <button onClick={onEditProfile} className="px-3 sm:px-4 py-2 text-sm rounded-lg bg-gray-900 text-white hover:bg-gray-800">Edit Profile</button>
-              <button onClick={onEditPreferences} className="px-3 sm:px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300">Edit Preferences</button>
+              
+              {!isOnline ? (
+                <button
+                  onClick={goOnline}
+                  disabled={isMatching || hasActiveSentMatch}
+                  className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                    isMatching || hasActiveSentMatch
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+                  }`}
+                >
+                  {isMatching ? 'Finding Matches...' : hasActiveSentMatch ? 'Match Pending...' : 'Match Me'}
+                </button>
+              ) : (
+                <button
+                  onClick={goOffline}
+                  className="px-6 py-2 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors"
+                >
+                  Go Offline
+                </button>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Hero section */}
-      <section className="pt-10 pb-8 text-center">
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gray-900">The Future of Matchmaking ✨</h1>
-        <p className="mt-3 text-gray-600 max-w-2xl mx-auto">Let the algorithm find who truly fits you.</p>
-        <p className="mt-2 text-sm text-gray-500">Use the profile selector (top right) to test different users</p>
-        <p className="mt-1 text-xs text-gray-400">
-          {isUsingDatabaseUsers ? '✅ Matches are saved to database and persist across reloads' : '⚠️ Matches are stored in memory only and will be lost on reload'}
-        </p>
-      </section>
-
-      {/* Auth panel removed - authentication skipped */}
-
-      {/* Primary action and status */}
-      <div className="text-center mb-10">
-        {!isOnline ? (
-          <div className="space-y-3">
-            {activeSentMatch && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-lg">
-                    {activeSentMatch.matchedUser?.avatar?.emoji || '👤'}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-blue-900">Active Match Pending</h4>
-                    <p className="text-sm text-blue-700">
-                      Waiting for {activeSentMatch.matchedUser?.name || 'Unknown'} to respond
-                    </p>
-                    <p className="text-xs text-blue-600 mt-1">
-                      Sent {new Date(activeSentMatch.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
+      {/* Active Sent Match Status */}
+      {hasActiveSentMatch && (
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm">
+                ⏳
               </div>
-            )}
-            <button
-              onClick={goOnline}
-              disabled={!!activeSentMatch}
-              className={`px-8 py-4 font-semibold rounded-xl text-lg transition-all duration-200 shadow-lg ${
-                activeSentMatch 
-                  ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
-                  : 'bg-black text-white hover:bg-gray-800'
-              }`}
-            >
-              {activeSentMatch ? 'Match Pending...' : 'Match Me'}
-            </button>
-            {activeSentMatch && (
-              <p className="text-xs text-gray-500 text-center">
-                You already have an active match. Wait for a response or cancel your current match.
-              </p>
-            )}
+              <div>
+                <h3 className="font-medium text-blue-800">Match Pending</h3>
+                <p className="text-sm text-blue-600">
+                  You have an active match with {activeSentMatch.matchedUser?.name || 'someone'}. 
+                  Waiting for their response...
+                </p>
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {isMatching ? (
-              <div className="flex items-center justify-center space-x-3">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-pink-500"></div>
-                <span className="text-lg font-medium text-gray-700">Finding your perfect match...</span>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-center space-x-2">
-                  <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
-                  <span className="text-lg font-medium text-gray-700">Online and looking for matches</span>
-                </div>
-                <button
-                  onClick={goOffline}
-                  className="px-6 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
-                >
-                  Go Offline
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Match History */}
-      {matchHistory.length > 0 && (() => {
-        const { sentMatches, receivedMatches, rejectedByMe, rejectedByThem } = organizeMatches();
-        
-        return (
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Match History */}
+        {matchHistory.length > 0 && (
           <div className="mb-10">
             <h3 className="text-xl font-bold text-gray-800 mb-6 text-center">Your Match History</h3>
             
@@ -631,6 +625,16 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
                       )}
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Mutual Matches Section */}
+            {mutualMatches.length > 0 && (
+              <div className="mb-8">
+                <h4 className="text-lg font-semibold text-gray-700 mb-4 text-center">🎉 Successful Matches</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {mutualMatches.map(match => renderMatchCard(match, false))}
                 </div>
               </div>
             )}
@@ -675,8 +679,30 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
               </div>
             )}
           </div>
-        );
-      })()}
+        )}
+
+        {/* Empty State */}
+        {matchHistory.length === 0 && (
+          <div className="text-center py-16">
+            <div className="text-6xl mb-4">💕</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">No matches yet</h3>
+            <p className="text-gray-600 mb-6">Click "Match Me" to start finding compatible people!</p>
+            {!isOnline && (
+              <button
+                onClick={goOnline}
+                disabled={isMatching || hasActiveSentMatch}
+                className={`px-8 py-3 rounded-lg font-medium transition-all ${
+                  isMatching || hasActiveSentMatch
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+                }`}
+              >
+                {isMatching ? 'Finding Matches...' : hasActiveSentMatch ? 'Match Pending...' : 'Match Me'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Match Modal */}
       {showMatchModal && (
@@ -698,10 +724,9 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       <NotificationCenter
         isVisible={showNotifications}
         onClose={() => setShowNotifications(false)}
+        currentUserId={currentUser?.id}
+        matchingService={matchingService}
       />
-
-      {/* Toast Notifications */}
-      <ToastManager />
     </div>
   );
 };
