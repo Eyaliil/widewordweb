@@ -181,9 +181,44 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     }
   }, [currentUser, matchingService]);
 
+  // Online Status Actions
+  /**
+   * Simply sets user as online (for header button)
+   */
+  const setOnline = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    try {
+      await userService.setUserOnline(currentUser.id);
+      setIsOnline(true);
+      await loadOnlineStatus();
+      console.log(`✅ User ${currentUser.name} is now online`);
+    } catch (error) {
+      console.error('Failed to set online:', error);
+      window.showToast('❌ Failed to go online. Please try again.', 'error', TOAST_DURATIONS.ERROR);
+    }
+  }, [currentUser]);
+
+  /**
+   * Simply sets user as offline (for header button)
+   */
+  const setOffline = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    try {
+      await userService.setUserOffline(currentUser.id);
+      setIsOnline(false);
+      await loadOnlineStatus();
+      console.log(`✅ User ${currentUser.name} is now offline`);
+    } catch (error) {
+      console.error('Failed to set offline:', error);
+      window.showToast('❌ Failed to go offline. Please try again.', 'error', TOAST_DURATIONS.ERROR);
+    }
+  }, [currentUser]);
+
   // Match Actions
   /**
-   * Handles going online and finding matches
+   * Handles going online and finding matches (for center Match Me button)
    */
   const goOnline = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -557,33 +592,29 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
                 )}
               </button>
               
+              {/* Go Online/Offline Button */}
+              {!isOnline ? (
+                <button
+                  onClick={setOnline}
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-colors text-sm"
+                >
+                  Go Online
+                </button>
+              ) : (
+                <button
+                  onClick={setOffline}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors text-sm"
+                >
+                  Go Offline
+                </button>
+              )}
+              
               <button
                 onClick={onLogout}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors text-sm"
               >
                 Logout
               </button>
-              
-              {!isOnline ? (
-                <button
-                  onClick={goOnline}
-                  disabled={isMatching || hasActiveSentMatch}
-                  className={`px-6 py-2 rounded-lg font-medium transition-all ${
-                    isMatching || hasActiveSentMatch
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
-                  }`}
-                >
-                  {isMatching ? 'Finding Matches...' : hasActiveSentMatch ? 'Match Pending...' : 'Match Me'}
-                </button>
-              ) : (
-                <button
-                  onClick={goOffline}
-                  className="px-6 py-2 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors"
-                >
-                  Go Offline
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -708,27 +739,47 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
           </div>
         )}
 
-        {/* Empty State */}
-        {matchHistory.length === 0 && (
-          <div className="text-center py-16">
-            <div className="text-6xl mb-4">💕</div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-2">No matches yet</h3>
-            <p className="text-gray-600 mb-6">Click "Match Me" to start finding compatible people!</p>
-            {!isOnline && (
-              <button
-                onClick={goOnline}
-                disabled={isMatching || hasActiveSentMatch}
-                className={`px-8 py-3 rounded-lg font-medium transition-all ${
-                  isMatching || hasActiveSentMatch
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
-                }`}
-              >
-                {isMatching ? 'Finding Matches...' : hasActiveSentMatch ? 'Match Pending...' : 'Match Me'}
-              </button>
-            )}
-          </div>
-        )}
+        {/* Match Me Button - Always in center */}
+        <div className="text-center py-16">
+          <div className="text-6xl mb-4">💕</div>
+          <h3 className="text-2xl font-bold text-gray-800 mb-2">
+            {matchHistory.length === 0 ? 'No matches yet' : 'Ready to find more matches?'}
+          </h3>
+          <p className="text-gray-600 mb-6">
+            {matchHistory.length === 0 
+              ? 'Click "Match Me" to start finding compatible people!' 
+              : 'Click "Match Me" to find your next potential match!'
+            }
+          </p>
+          
+          {/* Match Me Button - Only clickable when online */}
+          <button
+            onClick={goOnline}
+            disabled={!isOnline || isMatching || hasActiveSentMatch}
+            className={`px-8 py-4 rounded-lg font-medium transition-all text-lg ${
+              !isOnline
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : isMatching || hasActiveSentMatch
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+            }`}
+          >
+            {!isOnline 
+              ? '🔴 Go Online First' 
+              : isMatching 
+                ? 'Finding Matches...' 
+                : hasActiveSentMatch 
+                  ? 'Match Pending...' 
+                  : 'Match Me! 💕'
+            }
+          </button>
+          
+          {!isOnline && (
+            <p className="text-sm text-gray-500 mt-4">
+              You need to be online to find matches
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Match Modal */}
