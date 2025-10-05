@@ -15,20 +15,6 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   // Auth context
   const { user, currentUser, databaseUsers, isUsingDatabaseUsers } = useAuth();
   
-  // Custom hooks
-  const { isOnline: onlineStatus, onlineUsers, setOnline, setOffline } = useOnlineStatus(currentUser);
-  const { matchHistory, hasActiveSentMatch, loadMatchHistory, loadActiveSentMatch } = useMatchHistory(currentUser);
-  const { 
-    isMatching, 
-    currentMatch, 
-    showMatchModal, 
-    setCurrentMatch, 
-    setShowMatchModal, 
-    findMatches, 
-    goOnline, 
-    populateMatchedUser 
-  } = useMatchActions(currentUser, onlineStatus, loadMatchHistory, loadNotifications);
-
   // State management
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -46,6 +32,20 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       console.error('Failed to load notifications:', error);
     }
   }, [currentUser]);
+
+  // Custom hooks
+  const { isOnline: onlineStatus, onlineUsers, setOnline, setOffline } = useOnlineStatus(currentUser);
+  const { matchHistory, hasActiveSentMatch, loadMatchHistory, loadActiveSentMatch } = useMatchHistory(currentUser);
+  const { 
+    isMatching, 
+    currentMatch, 
+    showMatchModal, 
+    setCurrentMatch, 
+    setShowMatchModal, 
+    findMatches, 
+    goOnline, 
+    populateMatchedUser 
+  } = useMatchActions(currentUser, onlineStatus, loadMatchHistory, loadNotifications);
 
   // Load notifications when user changes
   useEffect(() => {
