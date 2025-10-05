@@ -225,27 +225,29 @@ export class SupabaseMatchingService {
 
   // Find potential matches for a user
   async findMatches(userId) {
-    console.log(`Finding matches for user: ${userId}`);
+    console.log(`🔍 Finding matches for user: ${userId}`);
     
     // Get current user's profile
     const currentUser = await userService.getUserById(userId);
     if (!currentUser) {
-      console.error('Error fetching current user');
+      console.error('❌ Error fetching current user');
       return [];
     }
-    console.log('Current user data:', currentUser);
+    console.log('✅ Current user data:', currentUser);
 
-    // Get other users for matching
-    const otherUsers = await userService.getMatchingUsers(userId);
-    console.log(`Found ${otherUsers.length} other users as potential matches`);
+    // Get only ONLINE users for matching
+    console.log('🔍 Fetching online matching users...');
+    const otherUsers = await userService.getOnlineMatchingUsers(userId);
+    console.log(`✅ Found ${otherUsers.length} online users as potential matches`);
+    console.log('📋 Online users details:', otherUsers.map(u => ({ id: u.id, name: u.name, interests: u.interests })));
 
     if (otherUsers.length === 0) {
-      console.log('No other users available');
+      console.log('No online users available');
       return [];
     }
 
-    // Calculate compatibility scores
-    const potentialMatches = otherUsers.map(otherUser => {
+    // Calculate compatibility scores for all online users
+    const allMatches = otherUsers.map(otherUser => {
       const score = this.calculateCompatibilityScore(currentUser, otherUser);
       console.log(`Compatibility with ${otherUser.name}: ${score.score} (${score.reasons.join(', ')})`);
       return {
@@ -262,31 +264,42 @@ export class SupabaseMatchingService {
         matchScore: score.score,
         matchReasons: score.reasons
       };
-    }).filter(match => match.matchScore >= 30); // Minimum threshold
+    });
 
-    console.log(`Found ${potentialMatches.length} matches above threshold (30)`);
+    // Sort by compatibility score (highest first)
+    allMatches.sort((a, b) => b.matchScore - a.matchScore);
 
-    // Sort by score and take the best match
-    potentialMatches.sort((a, b) => b.matchScore - a.matchScore);
+    // Try to find a good match (score >= 60)
+    const goodMatches = allMatches.filter(match => match.matchScore >= 60);
     
-    if (potentialMatches.length > 0) {
-      const bestMatch = potentialMatches[0];
-      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore})`);
+    if (goodMatches.length > 0) {
+      const bestMatch = goodMatches[0];
+      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}) - Good match found!`);
       const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons);
-      return [createdMatch]; // Return the actual created match for the UI
-    }
-
-    console.log('No matches found above threshold');
-    
-    // For testing purposes, if no matches found, create a match with the first available user
-    if (otherUsers.length > 0) {
-      console.log('Creating fallback match for testing');
-      const fallbackUser = otherUsers[0];
-      const fallbackScore = 75; // High score to ensure it shows
-      const fallbackReasons = ['Great compatibility potential'];
-      const createdMatch = await this.createMatch(userId, fallbackUser.id, fallbackScore, fallbackReasons);
       return [createdMatch];
     }
+
+    // If no good matches, try acceptable matches (score >= 40)
+    const acceptableMatches = allMatches.filter(match => match.matchScore >= 40);
+    
+    if (acceptableMatches.length > 0) {
+      const bestMatch = acceptableMatches[0];
+      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}) - Acceptable match found!`);
+      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons);
+      return [createdMatch];
+    }
+
+    // If no acceptable matches, try any match (score >= 20)
+    const anyMatches = allMatches.filter(match => match.matchScore >= 20);
+    
+    if (anyMatches.length > 0) {
+      const bestMatch = anyMatches[0];
+      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}) - Basic match found!`);
+      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons);
+      return [createdMatch];
+    }
+
+    console.log('No matches found even with lowest threshold (20)');
     
     return [];
   }

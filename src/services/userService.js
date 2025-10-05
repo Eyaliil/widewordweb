@@ -289,6 +289,58 @@ export class NameBasedUserService {
     );
   }
 
+  // Get user by ID
+  async getUserById(userId) {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select(`
+          user_id,
+          name,
+          age,
+          city,
+          bio,
+          avatar_type,
+          avatar_emoji,
+          avatar_initials,
+          avatar_image_url,
+          is_profile_complete,
+          genders(label),
+          pronouns(label),
+          user_interests(interest_id, interests(label))
+        `)
+        .eq('user_id', userId)
+        .eq('is_profile_complete', true)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user by ID:', error);
+        return null;
+      }
+
+      return {
+        id: profile.user_id,
+        name: profile.name,
+        age: profile.age,
+        gender: profile.genders?.label || 'Unknown',
+        pronouns: profile.pronouns?.label || '',
+        city: profile.city,
+        bio: profile.bio || '',
+        avatar: {
+          type: profile.avatar_type || 'emoji',
+          emoji: profile.avatar_emoji || '👤',
+          initials: profile.avatar_initials || '',
+          image: profile.avatar_image_url || null
+        },
+        interests: profile.user_interests?.map(ui => ui.interests.label) || [],
+        isProfileComplete: profile.is_profile_complete
+      };
+    } catch (error) {
+      console.error('Error in getUserById:', error);
+      return null;
+    }
+  }
+
   // Get all users for matching (excludes current user)
   async getMatchingUsers(currentUserId) {
     try {
@@ -336,6 +388,85 @@ export class NameBasedUserService {
       }));
     } catch (error) {
       console.error('Error in getMatchingUsers:', error);
+      return [];
+    }
+  }
+
+  // Get only online users for matching (excludes current user)
+  async getOnlineMatchingUsers(currentUserId) {
+    try {
+      console.log(`🔍 Getting online matching users (excluding ${currentUserId})`);
+      
+      // First get all online user IDs
+      const { data: onlineUsers, error: onlineError } = await supabase
+        .from('online_users')
+        .select('user_id')
+        .eq('is_online', true)
+        .neq('user_id', currentUserId);
+
+      if (onlineError) {
+        console.error('❌ Error fetching online users:', onlineError);
+        return [];
+      }
+
+      console.log(`📊 Found ${onlineUsers.length} online users in database:`, onlineUsers);
+
+      if (onlineUsers.length === 0) {
+        console.log('⚠️  No online users available for matching');
+        return [];
+      }
+
+      const onlineUserIds = onlineUsers.map(user => user.user_id);
+      console.log(`✅ Online user IDs to check:`, onlineUserIds);
+
+      // Get profiles for online users only
+      console.log('🔍 Fetching profiles for online users...');
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select(`
+          user_id,
+          name,
+          age,
+          city,
+          bio,
+          avatar_type,
+          avatar_emoji,
+          avatar_initials,
+          avatar_image_url,
+          is_profile_complete,
+          genders(label),
+          pronouns(label),
+          user_interests(interest_id, interests(label))
+        `)
+        .eq('is_profile_complete', true)
+        .in('user_id', onlineUserIds);
+
+      if (error) {
+        console.error('❌ Error fetching online user profiles:', error);
+        return [];
+      }
+
+      console.log(`✅ Found ${profiles.length} complete profiles for online users:`, profiles.map(p => ({ id: p.user_id, name: p.name, complete: p.is_profile_complete })));
+
+      return profiles.map(profile => ({
+        id: profile.user_id,
+        name: profile.name,
+        age: profile.age,
+        gender: profile.genders?.label || 'Unknown',
+        pronouns: profile.pronouns?.label || '',
+        city: profile.city,
+        bio: profile.bio || '',
+        avatar: {
+          type: profile.avatar_type || 'emoji',
+          emoji: profile.avatar_emoji || '👤',
+          initials: profile.avatar_initials || '',
+          image: profile.avatar_image_url || null
+        },
+        interests: profile.user_interests?.map(ui => ui.interests.label) || [],
+        isProfileComplete: profile.is_profile_complete
+      }));
+    } catch (error) {
+      console.error('Error in getOnlineMatchingUsers:', error);
       return [];
     }
   }
