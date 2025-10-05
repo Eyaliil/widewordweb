@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const UserSelector = () => {
-  const { currentUser, setCurrentUser, databaseUsers, loading, isUsingFakeUsers, isUsingDatabaseUsers, loadDatabaseUsers } = useAuth();
+  const { currentUser, setCurrentUser, databaseUsers, loading, isUsingDatabaseUsers, loadDatabaseUsers } = useAuth();
 
   // Don't render if still loading or no users available
   if (loading) {
@@ -67,7 +67,7 @@ const UserSelector = () => {
           Active: <span className="font-medium">{currentUser?.name || 'None'}</span>
         </div>
         <div className="text-xs text-gray-400 mt-1">
-          {isUsingDatabaseUsers ? 'Database users • Persistent' : 'Fake users • Memory only'} • No auth required
+          Database users • Persistent • No auth required
         </div>
       </div>
     </div>

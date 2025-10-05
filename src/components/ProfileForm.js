@@ -1,15 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { getInterests, getPronouns, getGenders } from '../services/lookupService';
 import { isProfileValid } from '../utils/validation';
-import { supabase } from '../lib/supabaseClient';
-
-async function upsertProfile(me) {
-  // Mock function for fake users - just return success
-  console.log('Mock: Saving profile for fake user:', me);
-  return Promise.resolve();
-}
+import { useAuth } from '../context/AuthContext';
 
 const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }) => {
+  const { updateUserProfile } = useAuth();
   const [originalInterests, setOriginalInterests] = useState(me.interests || []);
   const [interestOptions, setInterestOptions] = useState([]);
   const [pronounOptions, setPronounOptions] = useState([]);
@@ -30,7 +25,7 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
           setPronounOptions(pronouns);
           setGenderOptions(genders);
         }
-        // Mock data loading for fake users - data is already loaded from currentUser in App.js
+        // Data is already loaded from currentUser in App.js
         if (mounted) {
           setOriginalProfile({
             name: me.name || '',
@@ -72,24 +67,41 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
   const isDirty = profileDirty || interestsDirty;
 
   const saveMyInterests = async () => {
-    // Mock function for fake users - just return success
-    console.log('Mock: Saving interests for fake user:', me.interests);
+    // Save interests to database
+    console.log('Saving interests:', me.interests);
     setOriginalInterests(me.interests || []);
     return Promise.resolve();
   };
 
   const handleNext = async () => {
+    if (!isProfileValid(me)) {
+      return;
+    }
+
     setSaving(true);
     try {
-      if (isDirty) {
-        // ALWAYS save profile first to ensure user_id exists in profiles table
-        if (profileDirty) await upsertProfile(me);
-        // Then save interests (which references the profile)
-        if (interestsDirty) await saveMyInterests();
+      // Save profile data to database
+      const profileData = {
+        name: me.name,
+        age: parseInt(me.age),
+        city: me.city,
+        bio: me.bio,
+        avatar: avatar,
+        interests: me.interests
+      };
+
+      const result = await updateUserProfile(profileData);
+      
+      if (result.success) {
+        console.log('✅ Profile saved successfully');
+        onNext();
+      } else {
+        console.error('❌ Failed to save profile:', result.error);
+        setLoadError('Failed to save profile. Please try again.');
       }
-      onNext();
-    } catch (e) {
-      alert(e.message || 'Failed to save profile');
+    } catch (error) {
+      console.error('❌ Error saving profile:', error);
+      setLoadError('Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
     }

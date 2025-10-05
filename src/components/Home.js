@@ -16,12 +16,12 @@ const TOAST_DURATIONS = {
   INFO: 3000
 };
 
-const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProfile, onEditPreferences }) => {
+const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProfile, onEditPreferences, onLogout }) => {
   // Auth context
-  const { user, currentUser, databaseUsers, isUsingFakeUsers, isUsingDatabaseUsers } = useAuth();
+  const { user, currentUser, databaseUsers, isUsingDatabaseUsers } = useAuth();
   
   // Matching service
-  const matchingService = getMatchingService(isUsingFakeUsers, isUsingDatabaseUsers);
+  const matchingService = getMatchingService();
   
   // State management
   const [users, setUsers] = useState([]);
@@ -32,6 +32,20 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [activeSentMatch, setActiveSentMatch] = useState(null);
+
+  // Load online status when user changes
+  const loadOnlineStatus = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    try {
+      const onlineUsers = await userService.getOnlineUsers();
+      const isUserOnline = onlineUsers.some(user => user.id === currentUser.id && user.isOnline);
+      console.log(`🔍 Current user ${currentUser.name} online status:`, isUserOnline);
+      setIsOnline(isUserOnline);
+    } catch (error) {
+      console.error('Failed to load online status:', error);
+    }
+  }, [currentUser]);
 
   // Helper Functions
   /**
@@ -210,6 +224,8 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
           window.showToast('No new matches found right now. Try again later!', 'info', TOAST_DURATIONS.INFO);
         }
         setIsOnline(true);
+        // Refresh online status from database
+        await loadOnlineStatus();
       } else {
         window.showToast(`❌ Error: ${result.error}`, 'error', TOAST_DURATIONS.ERROR);
       }
@@ -232,6 +248,8 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     
     try {
       await matchingService.goOffline(currentUser.id);
+      // Refresh online status from database
+      await loadOnlineStatus();
     } catch (error) {
       console.error('Failed to go offline:', error);
     }
@@ -472,12 +490,11 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   // Effects
   useEffect(() => {
     console.log('🔧 Matching service debug:', {
-      isUsingFakeUsers,
       isUsingDatabaseUsers,
-      serviceType: isUsingDatabaseUsers ? 'SupabaseMatchingService (Persistent)' : 'MockMatchingService (Memory only)',
+      serviceType: 'SupabaseMatchingService (Persistent)',
       currentUser: currentUser?.name
     });
-  }, [isUsingFakeUsers, isUsingDatabaseUsers, currentUser]);
+  }, [isUsingDatabaseUsers, currentUser]);
 
   useEffect(() => {
     loadUsers();
@@ -485,6 +502,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
 
   useEffect(() => {
     if (currentUser) {
+      loadOnlineStatus(); // Load online status when user changes
       loadMatchHistory();
       loadNotifications();
       loadActiveSentMatch();
@@ -495,6 +513,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     if (isOnline && currentUser) {
       const interval = setInterval(() => {
         loadNotifications();
+        loadOnlineStatus(); // Refresh online status periodically
       }, 5000);
       return () => clearInterval(interval);
     }
@@ -507,6 +526,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
       <ToastManager />
+      
       
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
@@ -535,6 +555,13 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
                     {notificationCount}
                   </span>
                 )}
+              </button>
+              
+              <button
+                onClick={onLogout}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors text-sm"
+              >
+                Logout
               </button>
               
               {!isOnline ? (

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { currentMatchingService } from '../services/matchingService';
-import { fakeUsers } from '../data/fakeUsers';
 
 const NotificationCenter = ({ isVisible, onClose }) => {
   const { currentUser } = useAuth();
@@ -24,16 +23,6 @@ const NotificationCenter = ({ isVisible, onClose }) => {
     currentMatchingService.clearNotifications(currentUser.id);
     setNotifications([]);
     setUnreadCount(0);
-  };
-
-  const getMatchedUserName = (matchedUserId) => {
-    const matchedUser = fakeUsers.find(user => user.id === matchedUserId);
-    return matchedUser ? matchedUser.name : 'Unknown User';
-  };
-
-  const getMatchedUserAvatar = (matchedUserId) => {
-    const matchedUser = fakeUsers.find(user => user.id === matchedUserId);
-    return matchedUser ? matchedUser.avatar.emoji : '👤';
   };
 
   if (!isVisible) return null;
@@ -71,14 +60,14 @@ const NotificationCenter = ({ isVisible, onClose }) => {
                 <div key={index} className="bg-gray-50 rounded-lg p-4 border">
                   <div className="flex items-center space-x-3">
                     <div className="w-12 h-12 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center text-xl">
-                      {getMatchedUserAvatar(notification.matchedUserId)}
+                      👤
                     </div>
                     <div className="flex-1">
                       <h4 className="font-medium text-gray-800">
                         New Match! 💕
                       </h4>
                       <p className="text-sm text-gray-600">
-                        You matched with <span className="font-medium">{getMatchedUserName(notification.matchedUserId)}</span>
+                        You have a new match waiting for your decision
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         {notification.matchScore}% compatibility • {new Date(notification.timestamp).toLocaleTimeString()}

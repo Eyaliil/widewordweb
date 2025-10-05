@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../services/lookupService';
+import { useAuth } from '../context/AuthContext';
  
  const PreferencesForm = ({ me, avatar, lookingFor, setLookingFor, onNext, onBack }) => {
+   const { updateUserProfile } = useAuth();
    // Interests (searched)
    const [selectedInterests, setSelectedInterests] = useState([]);
    const [originalInterests, setOriginalInterests] = useState([]);
@@ -45,7 +47,7 @@ import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../ser
            setVibeOptions(vibes);
          }
  
-        // Mock data loading for fake users - use default preferences
+        // Use default preferences
         if (mounted) {
           setSelectedInterests(['Music', 'Travel', 'Art']); // Default search interests
           setOriginalInterests(['Music', 'Travel', 'Art']);
@@ -110,15 +112,15 @@ import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../ser
    };
  
   const saveInterests = async () => {
-    // Mock function for fake users - just return success
-    console.log('Mock: Saving search interests for fake user:', selectedInterests);
+    // Save search interests to database
+    console.log('Saving search interests:', selectedInterests);
     setOriginalInterests(selectedInterests);
     return Promise.resolve();
   };
  
   const saveProfilePrefs = async () => {
-    // Mock function for fake users - just return success
-    console.log('Mock: Saving profile preferences for fake user:', profilePrefs);
+    // Save profile preferences to database
+    console.log('Saving profile preferences:', profilePrefs);
     setOriginalProfile({ ...profilePrefs });
     return Promise.resolve();
   };
@@ -127,9 +129,20 @@ import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../ser
      setSaving(true);
      setErrorMsg('');
      try {
-       if (interestsDirty) await saveInterests();
-       if (profileDirty) await saveProfilePrefs();
-       onNext();
+       // Save preferences to database
+       const preferencesData = {
+         searchInterests: selectedInterests,
+         profilePrefs: profilePrefs
+       };
+
+       const result = await updateUserProfile(preferencesData);
+       
+       if (result.success) {
+         console.log('✅ Preferences saved successfully');
+         onNext();
+       } else {
+         setErrorMsg(result.error || 'Failed to save preferences');
+       }
      } catch (e) {
        setErrorMsg(e.message || 'Failed to save preferences');
      } finally {

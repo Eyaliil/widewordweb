@@ -1,82 +1,91 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { userService } from '../services/userService';
-import { fakeUsers } from '../data/fakeUsers';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [databaseUsers, setDatabaseUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Load database users on component mount
-  useEffect(() => {
-    loadDatabaseUsers();
-  }, []);
+  // Login with name
+  const loginWithName = async (name) => {
+    if (!name || name.trim().length === 0) {
+      return { success: false, error: 'Please enter a name' };
+    }
 
-  const loadDatabaseUsers = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      console.log('🔗 Attempting to connect to Supabase database...');
+      const result = await userService.loginWithName(name.trim());
       
-      // First test the database connection
-      const connectionTest = await userService.testDatabaseConnection();
-      if (!connectionTest.success) {
-        throw new Error(`Database connection failed: ${connectionTest.error}`);
+      if (result.success) {
+        setCurrentUser(result.user);
+        setIsLoggedIn(true);
+        console.log(`✅ Logged in as: ${result.user.name}`);
+        return { success: true, user: result.user };
+      } else {
+        console.error('❌ Login failed:', result.error);
+        return { success: false, error: result.error };
       }
-      
-      const users = await userService.getAllUsers();
-      setDatabaseUsers(users);
-      
-      // Set first user as default if no current user
-      if (users.length > 0 && !currentUser) {
-        setCurrentUser(users[0]);
-        console.log(`👤 Set active user: ${users[0].name}`);
-      }
-      
-      console.log('✅ Database connection successful! Using real database users.');
-      console.log(`📊 Loaded ${users.length} users from database`);
     } catch (error) {
-      console.error('❌ Failed to connect to database:', error);
-      console.log('🔄 Falling back to fake users. Please check your Supabase configuration.');
-      console.log('📋 Setup guide: See SUPABASE_SETUP.md for instructions');
-      console.log('🔧 Quick test: Run "node test-match-creation.js" to diagnose issues');
-      
-      // Fallback to fake users if database fails (for development)
-      setDatabaseUsers(fakeUsers);
-      if (!currentUser && fakeUsers.length > 0) {
-        setCurrentUser(fakeUsers[0]);
-        console.log(`👤 Set active user (fake): ${fakeUsers[0].name}`);
-      }
+      console.error('❌ Login error:', error);
+      return { success: false, error: 'Login failed. Please try again.' };
     } finally {
       setLoading(false);
     }
   };
 
-  // Mock user object that matches Supabase auth user structure
-  // Always provide a user object to skip authentication
+  // Logout
+  const logout = async () => {
+    if (currentUser?.id) {
+      // Set user as offline
+      await userService.setUserOffline(currentUser.id);
+    }
+    
+    setCurrentUser(null);
+    setIsLoggedIn(false);
+    console.log('👋 User logged out');
+  };
+
+  // Update user profile
+  const updateUserProfile = async (profileData) => {
+    if (!currentUser?.id) {
+      return { success: false, error: 'No user logged in' };
+    }
+
+    try {
+      const result = await userService.updateProfile(currentUser.id, profileData);
+      
+      if (result.success) {
+        // Refresh user data
+        const updatedProfile = await userService.getUserProfile(currentUser.id);
+        if (updatedProfile) {
+          setCurrentUser(updatedProfile);
+        }
+        return { success: true };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      console.error('❌ Profile update error:', error);
+      return { success: false, error: 'Profile update failed. Please try again.' };
+    }
+  };
+
+  // Mock user object for compatibility
   const user = currentUser ? {
     id: currentUser.id,
-    email: currentUser.email || `${currentUser.name.toLowerCase().replace(' ', '.')}@example.com`,
+    email: `${currentUser.name.toLowerCase().replace(' ', '.')}@example.com`,
     user_metadata: {
       name: currentUser.name
     }
-  } : {
-    id: 'temp-user',
-    email: 'temp@example.com',
-    user_metadata: {
-      name: 'Temp User'
-    }
-  };
+  } : null;
 
-  const session = {
+  const session = user ? {
     user: user,
     access_token: 'mock-token',
     refresh_token: 'mock-refresh-token'
-  };
-
-  // Determine if we're using database users (not fake users)
-  const isUsingDatabaseUsers = databaseUsers.length > 0 && databaseUsers !== fakeUsers;
+  } : null;
 
   const value = { 
     session, 
@@ -84,10 +93,12 @@ export const AuthProvider = ({ children }) => {
     loading, 
     currentUser, 
     setCurrentUser,
-    databaseUsers,
-    loadDatabaseUsers,
-    isUsingFakeUsers: !isUsingDatabaseUsers,
-    isUsingDatabaseUsers
+    isLoggedIn,
+    loginWithName,
+    logout,
+    updateUserProfile,
+    isUsingFakeUsers: false,
+    isUsingDatabaseUsers: true
   };
   
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
