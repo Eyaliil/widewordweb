@@ -6,7 +6,8 @@ const Header = ({
   setIsOnline, 
   onLogout,
   setOnline,
-  setOffline 
+  setOffline,
+  onEditProfile
 }) => {
   return (
     <div className="bg-white shadow-sm border-b border-gray-200">
@@ -17,11 +18,20 @@ const Header = ({
             <div className="w-10 h-10 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center text-lg">
               👤
             </div>
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">{currentUser?.name || 'User'}</h1>
-              <p className="text-sm text-gray-500">
-                {isOnline ? '🟢 Online' : '🔴 Offline'}
-              </p>
+            <div className="flex items-center space-x-3">
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900">{currentUser?.name || 'User'}</h1>
+                <p className="text-sm text-gray-500">
+                  {isOnline ? '🟢 Online' : '🔴 Offline'}
+                </p>
+              </div>
+              <button
+                onClick={onEditProfile}
+                className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors flex items-center space-x-1 text-sm"
+              >
+                <span>✏️</span>
+                <span>Edit</span>
+              </button>
             </div>
           </div>
 

@@ -6,7 +6,7 @@ const MainContent = ({
   isOnline, 
   isMatching, 
   hasActiveSentMatch, 
-  findMatches 
+  findMatches
 }) => {
   return (
     <div className="flex-1 overflow-y-auto p-8">
@@ -20,6 +20,7 @@ const MainContent = ({
           </div>
         </div>
       )}
+
 
       {/* Match Me Button - Always in center */}
       <div className="text-center py-16">

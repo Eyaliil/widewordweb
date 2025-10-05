@@ -7,6 +7,7 @@ import Header from './Home/Header';
 import MatchesSidebar from './Home/MatchesSidebar';
 import OnlineUsersSidebar from './Home/OnlineUsersSidebar';
 import MainContent from './Home/MainContent';
+import ProfileEditPage from './ProfileEditPage';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useMatchHistory } from '../hooks/useMatchHistory';
 import { useMatchActions } from '../hooks/useMatchActions';
@@ -18,6 +19,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   // State management
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [showProfileEditPage, setShowProfileEditPage] = useState(false);
 
   // Load notifications
   const loadNotifications = useCallback(async () => {
@@ -59,6 +61,25 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     setIsOnline(onlineStatus);
   }, [onlineStatus, setIsOnline]);
 
+  // Profile edit handlers
+  const handleEditProfileClick = useCallback(() => {
+    setShowProfileEditPage(true);
+  }, []);
+
+  const handleEditProfileInfo = useCallback(() => {
+    setShowProfileEditPage(false);
+    onEditProfile();
+  }, [onEditProfile]);
+
+  const handleEditPreferences = useCallback(() => {
+    setShowProfileEditPage(false);
+    onEditPreferences();
+  }, [onEditPreferences]);
+
+  const handleBackFromEdit = useCallback(() => {
+    setShowProfileEditPage(false);
+  }, []);
+
   // Handle match decisions
   const handleMatchDecision = useCallback(async (matchId, decision) => {
     try {
@@ -86,6 +107,21 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     }
   }, [loadMatchHistory, loadNotifications, loadActiveSentMatch]);
 
+  // Show profile edit page if requested
+  if (showProfileEditPage) {
+    return (
+      <div>
+        <ToastManager />
+        <ProfileEditPage
+          currentUser={currentUser}
+          onEditProfile={handleEditProfileInfo}
+          onEditPreferences={handleEditPreferences}
+          onBack={handleBackFromEdit}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex flex-col">
       {/* Toast Manager */}
@@ -99,6 +135,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
         onLogout={onLogout}
         setOnline={setOnline}
         setOffline={setOffline}
+        onEditProfile={handleEditProfileClick}
       />
 
       {/* Main Content - Fullscreen Layout */}
