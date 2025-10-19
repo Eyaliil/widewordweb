@@ -67,13 +67,18 @@ const MatchesSidebar = ({
                     key={match.id}
                     className={`p-3 rounded-lg transition-colors ${
                       match.status === 'mutual_match' 
-                        ? 'bg-green-50 border border-green-200 hover:bg-green-100' 
+                        ? 'bg-green-50 border border-green-200 hover:bg-green-100 cursor-pointer' 
                         : match.status === 'rejected'
                           ? 'bg-red-50 border border-red-200 hover:bg-red-100'
                           : match.status === 'expired'
                             ? 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
                             : 'bg-blue-50 border border-blue-200 hover:bg-blue-100'
                     }`}
+                    onClick={() => {
+                      if (match.status === 'mutual_match') {
+                        onViewProfile(match);
+                      }
+                    }}
                   >
                     <div className="flex items-center space-x-3 mb-2">
                       <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center text-sm">
@@ -144,24 +149,18 @@ const MatchesSidebar = ({
                         
                         {/* Profile and Chat buttons */}
                         <div className="flex space-x-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onViewProfile(match);
-                            }}
-                            className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium"
-                          >
-                            👤 View Profile
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectForMessaging(match);
-                            }}
-                            className="flex-1 bg-gray-500 text-white text-xs py-2 px-3 rounded-lg hover:bg-gray-600 transition-colors font-medium"
-                          >
-                            💬 Chat
-                          </button>
+                          {/* Only show View Profile button for non-mutual matches */}
+                          {match.status !== 'mutual_match' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onViewProfile(match);
+                              }}
+                              className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium"
+                            >
+                              👤 View Profile
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

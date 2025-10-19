@@ -3,7 +3,8 @@ import React from 'react';
 const Header = ({ 
   currentUser, 
   onLogout,
-  onEditProfile
+  onEditProfile,
+  onNavigateToChat
 }) => {
   return (
     <div className="bg-white shadow-sm border-b border-gray-200">
@@ -30,6 +31,15 @@ const Header = ({
 
           {/* Right side - Action buttons */}
           <div className="flex items-center space-x-4">
+            {/* Chat button */}
+            <button
+              onClick={onNavigateToChat}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2"
+            >
+              <span>💬</span>
+              <span>Messages</span>
+            </button>
+            
             {/* Logout button */}
             <button
               onClick={onLogout}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ProfileForm from './components/ProfileForm';
 import PreferencesForm from './components/PreferencesForm';
 import Home from './components/Home';
+import ChatPage from './components/ChatPage';
 import LoginForm from './components/LoginForm';
 import { useAuth } from './context/AuthContext';
 
@@ -123,6 +124,12 @@ function App() {
             onBack={goToRoom}
           />
         );
+      case 'chat':
+        return (
+          <ChatPage
+            onBack={() => setCurrentView('room')}
+          />
+        );
       case 'room':
       default:
         return (
@@ -143,6 +150,7 @@ function App() {
               } 
             }}
             onLogout={handleLogout}
+            onNavigateToChat={() => setCurrentView('chat')}
           />
         );
     }

@@ -8,11 +8,10 @@ import MatchesSidebar from './Home/MatchesSidebar';
 import MainContent from './Home/MainContent';
 import ProfileEditPage from './ProfileEditPage';
 import ProfilePage from './ProfilePage';
-import MessagingPanel from './MessagingPanel';
 import { useMatchHistory } from '../hooks/useMatchHistory';
 import { useMatchActions } from '../hooks/useMatchActions';
 
-const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences, onLogout }) => {
+const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences, onLogout, onNavigateToChat }) => {
   // Auth context
   const { user, currentUser, databaseUsers, isUsingDatabaseUsers } = useAuth();
   
@@ -22,7 +21,6 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
   const [showProfileEditPage, setShowProfileEditPage] = useState(false);
   const [showProfilePage, setShowProfilePage] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
-  const [selectedMatchForMessaging, setSelectedMatchForMessaging] = useState(null);
 
   // Load notifications
   const loadNotifications = useCallback(async () => {
@@ -88,14 +86,6 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
     setSelectedMatch(null);
   }, []);
 
-  // Handle messaging
-  const handleSelectMatchForMessaging = useCallback((match) => {
-    setSelectedMatchForMessaging(match);
-  }, []);
-
-  const handleCloseMessaging = useCallback(() => {
-    setSelectedMatchForMessaging(null);
-  }, []);
 
   // Handle match decisions
   const handleMatchDecision = useCallback(async (matchId, decision) => {
@@ -103,7 +93,7 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
       const { getMatchingService } = await import('../services/matchingService');
       const matchingService = getMatchingService();
       
-      await matchingService.respondToMatch(matchId, decision);
+      await matchingService.respondToMatch(matchId, currentUser.id, decision);
       
       // Reload data
       await loadMatchHistory();
@@ -122,7 +112,7 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
       console.error('Failed to respond to match:', error);
       window.showToast('❌ Failed to respond to match. Please try again.', 'error', 4000);
     }
-  }, [loadMatchHistory, loadNotifications, loadActiveSentMatch]);
+  }, [currentUser, loadMatchHistory, loadNotifications, loadActiveSentMatch]);
 
   // Handle accept match
   const handleAcceptMatch = useCallback((matchId) => {
@@ -185,6 +175,7 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
         currentUser={currentUser}
         onLogout={onLogout}
         onEditProfile={handleEditProfileClick}
+        onNavigateToChat={onNavigateToChat}
       />
 
       {/* Main Content - Fullscreen Layout */}
@@ -200,7 +191,6 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
           loadMatchHistory={loadMatchHistory}
           loadNotifications={loadNotifications}
           onViewProfile={handleViewProfile}
-          onSelectForMessaging={handleSelectMatchForMessaging}
           onAcceptMatch={handleAcceptMatch}
           onRejectMatch={handleRejectMatch}
         />
@@ -216,12 +206,6 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
           />
         </div>
 
-        {/* Messaging Panel - Right */}
-        <MessagingPanel
-          selectedMatch={selectedMatchForMessaging}
-          currentUser={currentUser}
-          onClose={handleCloseMessaging}
-        />
       </div>
 
       {/* Match Modal */}
@@ -245,7 +229,10 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
         isOpen={showNotifications}
         onClose={() => setShowNotifications(false)}
         notificationCount={notificationCount}
-        onNotificationClick={() => setShowNotifications(false)}
+        onNotificationClick={() => {
+          setShowNotifications(false);
+          loadNotifications(); // Reload notifications count when closing
+        }}
       />
 
       {/* Notification Bell */}

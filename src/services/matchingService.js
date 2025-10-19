@@ -664,6 +664,27 @@ export class SupabaseMatchingService {
     }
   }
 
+  // Mark a specific notification as read
+  async markNotificationAsRead(notificationId) {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId);
+
+      if (error) {
+        console.error('Error marking notification as read:', error);
+        throw error;
+      }
+
+      console.log(`✅ Notification ${notificationId} marked as read`);
+    } catch (error) {
+      console.error('Error in markNotificationAsRead:', error);
+      throw error;
+    }
+  }
+
+
   // Get match history (each user sees only their own perspective)
   async getMatchHistory(userId) {
     console.log(`📋 Fetching match history from database for user: ${userId}`);
@@ -857,6 +878,23 @@ export class SupabaseMatchingService {
     }
 
     return { success: true, match: updatedMatch };
+  }
+
+  // Respond to a match (wrapper for makeDecision)
+  async respondToMatch(matchId, userId, decision) {
+    console.log(`🎯 Responding to match ${matchId} with decision: ${decision} for user: ${userId}`);
+    
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+    
+    const result = await this.makeDecision(matchId, userId, decision);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to respond to match');
+    }
+    
+    return result;
   }
 
   // Create notification for mutual match

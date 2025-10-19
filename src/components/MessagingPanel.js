@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { messagingService } from '../services/messagingService';
 
 const MessagingPanel = ({ 
@@ -10,13 +10,33 @@ const MessagingPanel = ({
   const [newMessage, setNewMessage] = useState('');
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [subscription, setSubscription] = useState(null);
+  const messagesEndRef = useRef(null);
 
   // Load messages when a match is selected
   useEffect(() => {
     if (selectedMatch && selectedMatch.id) {
       loadMessages();
+      setupRealTimeSubscription();
     }
+
+    // Cleanup subscription when component unmounts or match changes
+    return () => {
+      if (subscription) {
+        messagingService.unsubscribeFromMessages(subscription);
+        setSubscription(null);
+      }
+    };
   }, [selectedMatch]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   const loadMessages = async () => {
     setIsLoadingMessages(true);
@@ -33,27 +53,111 @@ const MessagingPanel = ({
     }
   };
 
+  const setupRealTimeSubscription = () => {
+    if (subscription) {
+      messagingService.unsubscribeFromMessages(subscription);
+    }
+
+    const newSubscription = messagingService.subscribeToMessages(
+      selectedMatch.id,
+      currentUser.id,
+      (newMessage, eventType = 'insert') => {
+        if (eventType === 'insert') {
+          // Check if this message already exists (avoid duplicates)
+          setMessages(prevMessages => {
+            const messageExists = prevMessages.some(msg => msg.id === newMessage.id);
+            if (messageExists) {
+              console.log('📨 Message already exists, skipping duplicate');
+              return prevMessages;
+            }
+            
+            console.log('📨 Adding new message to UI:', newMessage);
+            return [...prevMessages, newMessage];
+          });
+          
+          // Mark as read if it's for the current user
+          if (newMessage.receiver_id === currentUser.id) {
+            messagingService.markMessagesAsRead(selectedMatch.id, currentUser.id);
+          }
+        } else if (eventType === 'update') {
+          setMessages(prevMessages => 
+            prevMessages.map(msg => 
+              msg.id === newMessage.id ? newMessage : msg
+            )
+          );
+        }
+      }
+    );
+
+    setSubscription(newSubscription);
+  };
+
   const sendMessage = async () => {
     if (!newMessage.trim() || isSendingMessage) return;
 
+    const messageText = newMessage.trim();
+    const matchedUser = selectedMatch.matchedUser || selectedMatch;
+    
     setIsSendingMessage(true);
+    
+    // Optimistically add the message to the UI immediately
+    const optimisticMessage = {
+      id: `temp-${Date.now()}`, // Temporary ID
+      match_id: selectedMatch.id,
+      sender_id: currentUser.id,
+      receiver_id: matchedUser.id,
+      message: messageText,
+      is_read: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+    setNewMessage('');
+    
     try {
-      const matchedUser = selectedMatch.matchedUser || selectedMatch;
       const result = await messagingService.sendMessage(
         selectedMatch.id,
         currentUser.id,
         matchedUser.id,
-        newMessage.trim()
+        messageText
       );
 
       if (result.success) {
-        setNewMessage('');
-        await loadMessages(); // Reload messages
+        // Replace the optimistic message with the real one
+        setMessages(prevMessages => 
+          prevMessages.map(msg => 
+            msg.id === optimisticMessage.id ? result.message : msg
+          )
+        );
+        
+        console.log('✅ Message sent successfully');
       } else {
         console.error('Failed to send message:', result.error);
+        
+        // Remove the optimistic message on failure
+        setMessages(prevMessages => 
+          prevMessages.filter(msg => msg.id !== optimisticMessage.id)
+        );
+        
+        // Restore the message text
+        setNewMessage(messageText);
+        
+        // Show error to user
+        window.showToast?.(`Failed to send message: ${result.error}`, 'error', 4000);
       }
     } catch (error) {
       console.error('Failed to send message:', error);
+      
+      // Remove the optimistic message on failure
+      setMessages(prevMessages => 
+        prevMessages.filter(msg => msg.id !== optimisticMessage.id)
+      );
+      
+      // Restore the message text
+      setNewMessage(messageText);
+      
+      window.showToast?.('Failed to send message. Please try again.', 'error', 4000);
     } finally {
       setIsSendingMessage(false);
     }
@@ -189,6 +293,7 @@ const MessagingPanel = ({
                 </div>
               );
             })}
+            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
