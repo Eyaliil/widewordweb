@@ -369,9 +369,33 @@ export class NameBasedUserService {
     }
   }
 
-  // Get all users for matching (excludes current user)
+  // Get all users for matching (excludes current user and users with existing matches)
   async getMatchingUsers(currentUserId) {
     try {
+      // First, get all users who already have matches with the current user
+      const { data: existingMatches, error: matchesError } = await supabase
+        .from('matches')
+        .select('user1_id, user2_id')
+        .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+
+      if (matchesError) {
+        console.error('Error fetching existing matches:', matchesError);
+        return [];
+      }
+
+      // Extract user IDs that already have matches with current user
+      const excludedUserIds = new Set();
+      existingMatches?.forEach(match => {
+        if (match.user1_id === currentUserId) {
+          excludedUserIds.add(match.user2_id);
+        } else {
+          excludedUserIds.add(match.user1_id);
+        }
+      });
+
+      console.log(`🚫 Excluding ${excludedUserIds.size} users with existing matches`);
+
+      // Get all profiles excluding current user and users with existing matches
       const { data: profiles, error } = await supabase
         .from('profiles')
         .select(`
@@ -390,6 +414,9 @@ export class NameBasedUserService {
         `)
         .eq('is_profile_complete', true)
         .neq('user_id', currentUserId);
+      
+      // Filter out users with existing matches
+      const filteredProfiles = profiles?.filter(profile => !excludedUserIds.has(profile.user_id)) || [];
 
       if (error) {
         console.error('Error fetching matching users:', error);
@@ -397,7 +424,7 @@ export class NameBasedUserService {
       }
 
       // Get all user IDs for interests lookup
-      const userIds = profiles.map(p => p.user_id);
+      const userIds = filteredProfiles.map(p => p.user_id);
       
       // Get interests for all users
       const { data: interestsData } = await supabase
@@ -435,7 +462,7 @@ export class NameBasedUserService {
       const genderMap = gendersData?.reduce((acc, g) => { acc[g.id] = g.label; return acc; }, {}) || {};
       const pronounsMap = pronounsData?.reduce((acc, p) => { acc[p.id] = p.label; return acc; }, {}) || {};
 
-      return profiles.map(profile => ({
+      return filteredProfiles.map(profile => ({
         id: profile.user_id,
         name: profile.name,
         age: profile.age,

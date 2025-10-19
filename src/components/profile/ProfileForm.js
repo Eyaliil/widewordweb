@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { getInterests, getPronouns, getGenders } from '../services/lookupService';
-import { isProfileValid } from '../utils/validation';
-import { useAuth } from '../context/AuthContext';
+import { getInterests, getPronouns, getGenders } from '../../services/lookupService';
+import { isProfileValid } from '../../utils/validation';
+import { useAuth } from '../../context/AuthContext';
 
 const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }) => {
   const { updateUserProfile } = useAuth();

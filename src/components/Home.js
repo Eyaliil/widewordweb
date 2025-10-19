@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import MatchModal from './MatchModal';
-import NotificationCenter from './NotificationCenter';
-import ToastManager from './ToastManager';
+import MatchModal from './matching/MatchModal';
+import NotificationCenter from './ui/NotificationCenter';
+import ToastManager from './ui/ToastManager';
 import Header from './Home/Header';
 import MatchesSidebar from './Home/MatchesSidebar';
 import MainContent from './Home/MainContent';
-import ProfileEditPage from './ProfileEditPage';
-import ProfilePage from './ProfilePage';
+import ProfileEditPage from './profile/ProfileEditPage';
+import ProfilePage from './profile/ProfilePage';
 import { useMatchHistory } from '../hooks/useMatchHistory';
 import { useMatchActions } from '../hooks/useMatchActions';
 

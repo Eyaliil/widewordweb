@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { messagingService } from '../services/messagingService';
+import { messagingService } from '../../services/messagingService';
 
 const MessagingPanel = ({ 
   selectedMatch, 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import MessagingPanel from './MessagingPanel';
-import { messagingService } from '../services/messagingService';
+import { messagingService } from '../../services/messagingService';
 
 const ChatPage = ({ onBack }) => {
   const { currentUser } = useAuth();

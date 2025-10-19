@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import ProfileForm from './components/ProfileForm';
+import ProfileForm from './components/profile/ProfileForm';
 import PreferencesForm from './components/PreferencesForm';
 import Home from './components/Home';
-import ChatPage from './components/ChatPage';
-import LoginForm from './components/LoginForm';
+import ChatPage from './components/messaging/ChatPage';
+import LoginForm from './components/auth/LoginForm';
 import { useAuth } from './context/AuthContext';
 
 function App() {
-  const { currentUser, isLoggedIn, logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const [currentView, setCurrentView] = useState('login');
   const [me, setMe] = useState({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '', interests: [] });
   const [avatar, setAvatar] = useState({ type: 'emoji', image: null, emoji: '👤', initials: '' });

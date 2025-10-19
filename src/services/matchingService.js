@@ -207,14 +207,14 @@ export class SupabaseMatchingService {
     }
     console.log('✅ Current user data:', currentUser);
 
-    // Get all users for matching (excludes current user)
+    // Get all users for matching (excludes current user and existing matches)
     console.log('🔍 Fetching all matching users...');
     const otherUsers = await userService.getMatchingUsers(userId);
     console.log(`✅ Found ${otherUsers.length} users as potential matches`);
     console.log('📋 Users details:', otherUsers.map(u => ({ id: u.id, name: u.name, interests: u.interests })));
 
     if (otherUsers.length === 0) {
-      console.log('No users available');
+      console.log('❌ No users available for matching (all users already matched or no complete profiles)');
       return [];
     }
 
@@ -541,6 +541,13 @@ export class SupabaseMatchingService {
           hint: error.hint,
           code: error.code
         });
+        
+        // Handle duplicate key constraint violation
+        if (error.code === '23505' && error.message.includes('duplicate key value violates unique constraint')) {
+          console.log('⚠️ Match already exists between these users, skipping creation');
+          return null;
+        }
+        
         return null;
       }
 

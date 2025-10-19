@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
 const NotificationCenter = ({ isOpen, onClose, notificationCount, onNotificationClick }) => {
   const { currentUser } = useAuth();
@@ -17,7 +17,7 @@ const NotificationCenter = ({ isOpen, onClose, notificationCount, onNotification
     
     setIsLoading(true);
     try {
-      const { getMatchingService } = await import('../services/matchingService');
+      const { getMatchingService } = await import('../../services/matchingService');
       const matchingService = getMatchingService();
       const notificationsData = await matchingService.getNotifications(currentUser.id);
       setNotifications(notificationsData);
@@ -30,7 +30,7 @@ const NotificationCenter = ({ isOpen, onClose, notificationCount, onNotification
 
   const markAsRead = async (notificationId) => {
     try {
-      const { getMatchingService } = await import('../services/matchingService');
+      const { getMatchingService } = await import('../../services/matchingService');
       const matchingService = getMatchingService();
       await matchingService.markNotificationAsRead(notificationId);
       
@@ -130,7 +130,7 @@ const NotificationCenter = ({ isOpen, onClose, notificationCount, onNotification
             <button
               onClick={async () => {
                 try {
-                  const { getMatchingService } = await import('../services/matchingService');
+                  const { getMatchingService } = await import('../../services/matchingService');
                   const matchingService = getMatchingService();
                   await matchingService.clearNotifications(currentUser.id);
                   
