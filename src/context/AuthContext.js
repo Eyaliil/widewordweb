@@ -37,11 +37,7 @@ export const AuthProvider = ({ children }) => {
 
   // Logout
   const logout = async () => {
-    if (currentUser?.id) {
-      // Set user as offline
-      await userService.setUserOffline(currentUser.id);
-    }
-    
+    // Clear user data (online status logic removed)
     setCurrentUser(null);
     setIsLoggedIn(false);
     console.log('👋 User logged out');

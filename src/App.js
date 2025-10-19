@@ -11,7 +11,6 @@ function App() {
   const [me, setMe] = useState({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '', interests: [] });
   const [avatar, setAvatar] = useState({ type: 'emoji', image: null, emoji: '👤', initials: '' });
   const [lookingFor, setLookingFor] = useState({ genders: [], ageRange: [25, 35], interests: [], distance: 50, vibe: '', dealBreakers: [] });
-  const [isOnline, setIsOnline] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showBackOnProfile, setShowBackOnProfile] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
@@ -90,7 +89,6 @@ function App() {
     setMe({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '', interests: [] });
     setAvatar({ type: 'emoji', image: null, emoji: '👤', initials: '' });
     setLookingFor({ genders: [], ageRange: [25, 35], interests: [], distance: 50, vibe: '', dealBreakers: [] });
-    setIsOnline(false);
     setIsEditingProfile(false);
     setOnboarding(false);
   };
@@ -132,8 +130,6 @@ function App() {
             me={me}
             avatar={avatar}
             isProfileComplete={isProfileComplete()}
-            isOnline={isOnline}
-            setIsOnline={setIsOnline}
             onEditProfile={() => { 
               if (isProfileComplete()) { 
                 setIsEditingProfile(true); 

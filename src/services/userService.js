@@ -24,8 +24,6 @@ export class NameBasedUserService {
           .update({ last_login: new Date().toISOString() })
           .eq('id', existingUser.id);
         
-        // Set user as online
-        await this.setUserOnline(existingUser.id);
         
         // Get user profile
         const profile = await this.getUserProfile(existingUser.id);
@@ -79,8 +77,6 @@ export class NameBasedUserService {
         return { success: false, error: profileError.message };
       }
 
-      // Set new user as online
-      await this.setUserOnline(newUser.id);
 
       console.log(`✅ Created new user and profile: ${name}`);
       return {
@@ -305,9 +301,8 @@ export class NameBasedUserService {
           avatar_initials,
           avatar_image_url,
           is_profile_complete,
-          genders(label),
-          pronouns(label),
-          user_interests(interest_id, interests(label))
+          gender_id,
+          pronouns_id
         `)
         .eq('user_id', userId)
         .eq('is_profile_complete', true)
@@ -318,12 +313,45 @@ export class NameBasedUserService {
         return null;
       }
 
+      // Get gender and pronouns separately
+      let gender = '';
+      let pronouns = '';
+      
+      if (profile.gender_id) {
+        const { data: genderData } = await supabase
+          .from('genders')
+          .select('label')
+          .eq('id', profile.gender_id)
+          .single();
+        gender = genderData?.label || '';
+      }
+
+      if (profile.pronouns_id) {
+        const { data: pronounsData } = await supabase
+          .from('pronouns')
+          .select('label')
+          .eq('id', profile.pronouns_id)
+          .single();
+        pronouns = pronounsData?.label || '';
+      }
+
+      // Get interests separately
+      const { data: interestsData } = await supabase
+        .from('user_interests')
+        .select(`
+          interest_id,
+          interests(label)
+        `)
+        .eq('user_id', userId);
+
+      const interests = interestsData?.map(ui => ui.interests.label) || [];
+
       return {
         id: profile.user_id,
         name: profile.name,
         age: profile.age,
-        gender: profile.genders?.label || 'Unknown',
-        pronouns: profile.pronouns?.label || '',
+        gender: gender,
+        pronouns: pronouns,
         city: profile.city,
         bio: profile.bio || '',
         avatar: {
@@ -332,7 +360,7 @@ export class NameBasedUserService {
           initials: profile.avatar_initials || '',
           image: profile.avatar_image_url || null
         },
-        interests: profile.user_interests?.map(ui => ui.interests.label) || [],
+        interests: interests,
         isProfileComplete: profile.is_profile_complete
       };
     } catch (error) {
@@ -357,9 +385,8 @@ export class NameBasedUserService {
           avatar_initials,
           avatar_image_url,
           is_profile_complete,
-          genders(label),
-          pronouns(label),
-          user_interests(interest_id, interests(label))
+          gender_id,
+          pronouns_id
         `)
         .eq('is_profile_complete', true)
         .neq('user_id', currentUserId);
@@ -369,12 +396,51 @@ export class NameBasedUserService {
         return [];
       }
 
+      // Get all user IDs for interests lookup
+      const userIds = profiles.map(p => p.user_id);
+      
+      // Get interests for all users
+      const { data: interestsData } = await supabase
+        .from('user_interests')
+        .select(`
+          user_id,
+          interest_id,
+          interests(label)
+        `)
+        .in('user_id', userIds);
+
+      // Create a map of user_id to interests
+      const interestsMap = {};
+      interestsData?.forEach(ui => {
+        if (!interestsMap[ui.user_id]) {
+          interestsMap[ui.user_id] = [];
+        }
+        interestsMap[ui.user_id].push(ui.interests.label);
+      });
+
+      // Get gender and pronouns data
+      const genderIds = [...new Set(profiles.map(p => p.gender_id).filter(Boolean))];
+      const pronounsIds = [...new Set(profiles.map(p => p.pronouns_id).filter(Boolean))];
+
+      const { data: gendersData } = await supabase
+        .from('genders')
+        .select('id, label')
+        .in('id', genderIds);
+
+      const { data: pronounsData } = await supabase
+        .from('pronouns')
+        .select('id, label')
+        .in('id', pronounsIds);
+
+      const genderMap = gendersData?.reduce((acc, g) => { acc[g.id] = g.label; return acc; }, {}) || {};
+      const pronounsMap = pronounsData?.reduce((acc, p) => { acc[p.id] = p.label; return acc; }, {}) || {};
+
       return profiles.map(profile => ({
         id: profile.user_id,
         name: profile.name,
         age: profile.age,
-        gender: profile.genders?.label || 'Unknown',
-        pronouns: profile.pronouns?.label || '',
+        gender: genderMap[profile.gender_id] || 'Unknown',
+        pronouns: pronounsMap[profile.pronouns_id] || '',
         city: profile.city,
         bio: profile.bio || '',
         avatar: {
@@ -383,7 +449,7 @@ export class NameBasedUserService {
           initials: profile.avatar_initials || '',
           image: profile.avatar_image_url || null
         },
-        interests: profile.user_interests?.map(ui => ui.interests.label) || [],
+        interests: interestsMap[profile.user_id] || [],
         isProfileComplete: profile.is_profile_complete
       }));
     } catch (error) {
@@ -392,176 +458,7 @@ export class NameBasedUserService {
     }
   }
 
-  // Get only online users for matching (excludes current user)
-  async getOnlineMatchingUsers(currentUserId) {
-    try {
-      console.log(`🔍 Getting online matching users (excluding ${currentUserId})`);
-      
-      // First get all online user IDs
-      const { data: onlineUsers, error: onlineError } = await supabase
-        .from('online_users')
-        .select('user_id')
-        .eq('is_online', true)
-        .neq('user_id', currentUserId);
 
-      if (onlineError) {
-        console.error('❌ Error fetching online users:', onlineError);
-        return [];
-      }
-
-      console.log(`📊 Found ${onlineUsers.length} online users in database:`, onlineUsers);
-
-      if (onlineUsers.length === 0) {
-        console.log('⚠️  No online users available for matching');
-        return [];
-      }
-
-      const onlineUserIds = onlineUsers.map(user => user.user_id);
-      console.log(`✅ Online user IDs to check:`, onlineUserIds);
-
-      // Get profiles for online users only
-      console.log('🔍 Fetching profiles for online users...');
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select(`
-          user_id,
-          name,
-          age,
-          city,
-          bio,
-          avatar_type,
-          avatar_emoji,
-          avatar_initials,
-          avatar_image_url,
-          is_profile_complete,
-          genders(label),
-          pronouns(label),
-          user_interests(interest_id, interests(label))
-        `)
-        .eq('is_profile_complete', true)
-        .in('user_id', onlineUserIds);
-
-      if (error) {
-        console.error('❌ Error fetching online user profiles:', error);
-        return [];
-      }
-
-      console.log(`✅ Found ${profiles.length} complete profiles for online users:`, profiles.map(p => ({ id: p.user_id, name: p.name, complete: p.is_profile_complete })));
-
-      return profiles.map(profile => ({
-        id: profile.user_id,
-        name: profile.name,
-        age: profile.age,
-        gender: profile.genders?.label || 'Unknown',
-        pronouns: profile.pronouns?.label || '',
-        city: profile.city,
-        bio: profile.bio || '',
-        avatar: {
-          type: profile.avatar_type || 'emoji',
-          emoji: profile.avatar_emoji || '👤',
-          initials: profile.avatar_initials || '',
-          image: profile.avatar_image_url || null
-        },
-        interests: profile.user_interests?.map(ui => ui.interests.label) || [],
-        isProfileComplete: profile.is_profile_complete
-      }));
-    } catch (error) {
-      console.error('Error in getOnlineMatchingUsers:', error);
-      return [];
-    }
-  }
-
-  // Set user as online
-  async setUserOnline(userId) {
-    try {
-      console.log(`🟢 Setting user ${userId} as online`);
-      
-      const { data, error } = await supabase
-        .from('online_users')
-        .upsert({
-          user_id: userId,
-          is_online: true,
-          last_seen: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
-        })
-        .select();
-
-      if (error) {
-        console.error('❌ Error setting user online:', error);
-        console.error('❌ Error details:', error.message, error.details, error.hint);
-        return { success: false, error: error.message };
-      }
-
-      console.log(`✅ User ${userId} is now online`);
-      console.log('✅ Online status data:', data);
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Error in setUserOnline:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // Set user as offline
-  async setUserOffline(userId) {
-    try {
-      console.log(`🔴 Setting user ${userId} as offline`);
-      
-      const { data, error } = await supabase
-        .from('online_users')
-        .upsert({
-          user_id: userId,
-          is_online: false,
-          last_seen: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
-        })
-        .select();
-
-      if (error) {
-        console.error('❌ Error setting user offline:', error);
-        console.error('❌ Error details:', error.message, error.details, error.hint);
-        return { success: false, error: error.message };
-      }
-
-      console.log(`✅ User ${userId} is now offline`);
-      console.log('✅ Offline status data:', data);
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Error in setUserOffline:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // Get online users
-  async getOnlineUsers() {
-    try {
-      const { data: onlineUsers, error } = await supabase
-        .from('online_users')
-        .select(`
-          user_id,
-          is_online,
-          last_seen,
-          users(name)
-        `)
-        .eq('is_online', true);
-
-      if (error) {
-        console.error('❌ Error fetching online users:', error);
-        return [];
-      }
-
-      return onlineUsers.map(ou => ({
-        id: ou.user_id,
-        name: ou.users.name,
-        isOnline: ou.is_online,
-        lastSeen: ou.last_seen
-      }));
-    } catch (error) {
-      console.error('❌ Error in getOnlineUsers:', error);
-      return [];
-    }
-  }
 
   // Test database connection
   async testDatabaseConnection() {

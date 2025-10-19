@@ -30,10 +30,7 @@ export class SupabaseMatchingService {
     try {
       const { data: match, error } = await supabase
         .from('matches')
-        .select(`
-          *,
-          user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
-        `)
+        .select('*')
         .eq('user1_id', userId)
         .eq('status', 'pending')
         .eq('user1_decision', 'pending')
@@ -48,6 +45,18 @@ export class SupabaseMatchingService {
         return null;
       }
 
+      // Get the matched user's profile separately
+      const { data: matchedUserProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('user_id, name, age, city, bio, avatar_type, avatar_emoji')
+        .eq('user_id', match.user2_id)
+        .single();
+
+      if (profileError) {
+        console.error('Error getting matched user profile:', profileError);
+        return null;
+      }
+
       // Transform to match the expected format
       return {
         id: match.id,
@@ -58,14 +67,14 @@ export class SupabaseMatchingService {
         matchScore: match.match_score,
         matchReasons: match.match_reasons,
         matchedUser: {
-          id: match.user2.user_id,
-          name: match.user2.name,
-          age: match.user2.age,
-          city: match.user2.city,
-          bio: match.user2.bio,
+          id: matchedUserProfile.user_id,
+          name: matchedUserProfile.name,
+          age: matchedUserProfile.age,
+          city: matchedUserProfile.city,
+          bio: matchedUserProfile.bio,
           avatar: {
-            type: match.user2.avatar_type,
-            emoji: match.user2.avatar_emoji
+            type: matchedUserProfile.avatar_type,
+            emoji: matchedUserProfile.avatar_emoji
           }
         },
         createdAt: new Date(match.created_at),
@@ -78,59 +87,6 @@ export class SupabaseMatchingService {
     }
   }
 
-  // Go online and start looking for matches
-  async goOnline(userId) {
-    console.log(`User ${userId} is now online`);
-    
-    // Check if user already has an active sent match
-    const hasActiveMatch = await this.hasActiveSentMatch(userId);
-    if (hasActiveMatch) {
-      console.log('❌ User already has an active sent match. Cannot create new match.');
-      return { success: false, error: 'You already have an active match pending. Wait for a response or cancel your current match.' };
-    }
-    
-    // Add user to online_users table
-    const { error } = await supabase
-      .from('online_users')
-      .upsert({ user_id: userId, is_online: true, last_seen: new Date().toISOString() }, { onConflict: 'user_id' });
-    
-    if (error) {
-      console.error('Error going online:', error);
-      return { success: false, error: error.message };
-    }
-    
-    // Check if there are any pending matches waiting for this user's decision
-    const pendingMatches = await this.getPendingMatches(userId);
-    if (pendingMatches.length > 0) {
-      console.log(`User ${userId} has ${pendingMatches.length} pending matches waiting for decision`);
-      return { success: true, hasPendingMatches: true, pendingMatches };
-    }
-    
-    // Find new matches and create them in the database
-    const newMatches = await this.findMatches(userId);
-    if (newMatches.length > 0) {
-      console.log(`User ${userId} found ${newMatches.length} new matches`);
-      return { success: true, hasPendingMatches: false, pendingMatches: [], newMatches };
-    }
-    
-    return { success: true, hasPendingMatches: false, pendingMatches: [], newMatches: [] };
-  }
-
-  // Go offline
-  async goOffline(userId) {
-    console.log(`User ${userId} is now offline`);
-    
-    const { error } = await supabase
-      .from('online_users')
-      .upsert({ user_id: userId, is_online: false, last_seen: new Date().toISOString() }, { onConflict: 'user_id' });
-    
-    if (error) {
-      console.error('Error going offline:', error);
-      return { success: false, error: error.message };
-    }
-    
-    return { success: true };
-  }
 
   // Get matches that are waiting for this user's decision
   async getPendingMatches(userId) {
@@ -139,11 +95,7 @@ export class SupabaseMatchingService {
     
     const { data: matches, error } = await supabase
       .from('matches')
-      .select(`
-        *,
-        user1:profiles!matches_user1_id_fkey(name, age, city, bio, avatar_type, avatar_emoji),
-        user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
-      `)
+      .select('*')
       .eq('status', 'pending')
       .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
       .or(`user1_decision.eq.pending,user2_decision.eq.pending`);
@@ -153,10 +105,29 @@ export class SupabaseMatchingService {
       return [];
     }
 
+    // Get profiles for all matched users
+    const userIds = matches.flatMap(match => [match.user1_id, match.user2_id]);
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('user_id, name, age, city, bio, avatar_type, avatar_emoji')
+      .in('user_id', userIds);
+
+    if (profilesError) {
+      console.error('Error fetching profiles:', profilesError);
+      return [];
+    }
+
+    // Create a map of user_id to profile for quick lookup
+    const profileMap = profiles.reduce((acc, profile) => {
+      acc[profile.user_id] = profile;
+      return acc;
+    }, {});
+
     return matches.map(match => {
       // Transform match to show from current user's perspective
       if (match.user2_id === userId) {
         // If current user is user2, flip the match to show from their perspective
+        const user1Profile = profileMap[match.user1_id];
         return {
           id: match.id,
           user1Id: userId,
@@ -167,12 +138,12 @@ export class SupabaseMatchingService {
           matchReasons: match.match_reasons,
           matchedUser: {
             id: match.user1_id,
-            name: match.user1.name,
-            age: match.user1.age,
-            city: match.user1.city,
-            bio: match.user1.bio,
-            avatar_type: match.user1.avatar_type,
-            avatar_emoji: match.user1.avatar_emoji
+            name: user1Profile?.name || 'Unknown User',
+            age: user1Profile?.age || 25,
+            city: user1Profile?.city || 'Unknown',
+            bio: user1Profile?.bio || 'No bio available',
+            avatar_type: user1Profile?.avatar_type || 'emoji',
+            avatar_emoji: user1Profile?.avatar_emoji || '👤'
           },
           createdAt: new Date(match.created_at),
           status: match.status,
@@ -180,6 +151,7 @@ export class SupabaseMatchingService {
         };
       } else {
         // Current user is user1, just ensure matchedUser is set
+        const user2Profile = profileMap[match.user2_id];
         return {
           id: match.id,
           user1Id: match.user1_id,
@@ -190,12 +162,12 @@ export class SupabaseMatchingService {
           matchReasons: match.match_reasons,
           matchedUser: {
             id: match.user2_id,
-            name: match.user2.name,
-            age: match.user2.age,
-            city: match.user2.city,
-            bio: match.user2.bio,
-            avatar_type: match.user2.avatar_type,
-            avatar_emoji: match.user2.avatar_emoji
+            name: user2Profile?.name || 'Unknown User',
+            age: user2Profile?.age || 25,
+            city: user2Profile?.city || 'Unknown',
+            bio: user2Profile?.bio || 'No bio available',
+            avatar_type: user2Profile?.avatar_type || 'emoji',
+            avatar_emoji: user2Profile?.avatar_emoji || '👤'
           },
           createdAt: new Date(match.created_at),
           status: match.status,
@@ -235,21 +207,21 @@ export class SupabaseMatchingService {
     }
     console.log('✅ Current user data:', currentUser);
 
-    // Get only ONLINE users for matching
-    console.log('🔍 Fetching online matching users...');
-    const otherUsers = await userService.getOnlineMatchingUsers(userId);
-    console.log(`✅ Found ${otherUsers.length} online users as potential matches`);
-    console.log('📋 Online users details:', otherUsers.map(u => ({ id: u.id, name: u.name, interests: u.interests })));
+    // Get all users for matching (excludes current user)
+    console.log('🔍 Fetching all matching users...');
+    const otherUsers = await userService.getMatchingUsers(userId);
+    console.log(`✅ Found ${otherUsers.length} users as potential matches`);
+    console.log('📋 Users details:', otherUsers.map(u => ({ id: u.id, name: u.name, interests: u.interests })));
 
     if (otherUsers.length === 0) {
-      console.log('No online users available');
+      console.log('No users available');
       return [];
     }
 
-    // Calculate compatibility scores for all online users
+    // Calculate compatibility scores for all users
     const allMatches = otherUsers.map(otherUser => {
-      const score = this.calculateCompatibilityScore(currentUser, otherUser);
-      console.log(`Compatibility with ${otherUser.name}: ${score.score} (${score.reasons.join(', ')})`);
+      const compatibility = this.calculateCompatibilityScore(currentUser, otherUser);
+      console.log(`Compatibility with ${otherUser.name}: ${compatibility.score}% (${compatibility.reasons.join(', ')})`);
       return {
         id: otherUser.id,
         matchedUser: {
@@ -261,8 +233,10 @@ export class SupabaseMatchingService {
           avatar_type: otherUser.avatar.type,
           avatar_emoji: otherUser.avatar.emoji
         },
-        matchScore: score.score,
-        matchReasons: score.reasons
+        matchScore: compatibility.score,
+        matchReasons: compatibility.reasons,
+        detailedInsights: compatibility.detailedInsights,
+        breakdown: compatibility.breakdown
       };
     });
 
@@ -274,8 +248,8 @@ export class SupabaseMatchingService {
     
     if (goodMatches.length > 0) {
       const bestMatch = goodMatches[0];
-      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}) - Good match found!`);
-      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons);
+      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}%) - Good match found!`);
+      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons, bestMatch.detailedInsights, bestMatch.breakdown);
       return [createdMatch];
     }
 
@@ -284,8 +258,8 @@ export class SupabaseMatchingService {
     
     if (acceptableMatches.length > 0) {
       const bestMatch = acceptableMatches[0];
-      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}) - Acceptable match found!`);
-      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons);
+      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}%) - Acceptable match found!`);
+      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons, bestMatch.detailedInsights, bestMatch.breakdown);
       return [createdMatch];
     }
 
@@ -294,8 +268,8 @@ export class SupabaseMatchingService {
     
     if (anyMatches.length > 0) {
       const bestMatch = anyMatches[0];
-      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}) - Basic match found!`);
-      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons);
+      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}%) - Basic match found!`);
+      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons, bestMatch.detailedInsights, bestMatch.breakdown);
       return [createdMatch];
     }
 
@@ -308,30 +282,70 @@ export class SupabaseMatchingService {
   calculateCompatibilityScore(user1, user2) {
     let score = 0;
     let reasons = [];
+    let detailedInsights = {
+      interests: { score: 0, details: [] },
+      age: { score: 0, details: [] },
+      gender: { score: 0, details: [] },
+      location: { score: 0, details: [] },
+      bio: { score: 0, details: [] },
+      lifestyle: { score: 0, details: [] },
+      personality: { score: 0, details: [] }
+    };
 
-    // Common interests (40 points max)
+    // Enhanced Interest Matching (35 points max)
     const user1Interests = user1.interests || [];
     const user2Interests = user2.interests || [];
     const commonInterests = user1Interests.filter(interest => 
       user2Interests.includes(interest)
     );
-    const interestScore = Math.min(commonInterests.length * 10, 40);
-    score += interestScore;
+    
+    // Weighted interest scoring based on number of shared interests
+    let interestScore = 0;
     if (commonInterests.length > 0) {
+      interestScore = Math.min(commonInterests.length * 8, 35);
       reasons.push(`Shared ${commonInterests.length} interests: ${commonInterests.join(', ')}`);
+      detailedInsights.interests = {
+        score: interestScore,
+        details: [`You both love: ${commonInterests.join(', ')}`]
+      };
+    } else {
+      detailedInsights.interests = {
+        score: 0,
+        details: ['No shared interests found']
+      };
     }
+    score += interestScore;
 
-    // Age compatibility (20 points max)
+    // Enhanced Age Compatibility (25 points max)
     const ageDiff = Math.abs(user1.age - user2.age);
-    if (ageDiff <= 5) {
-      score += 20;
-      reasons.push('Similar age');
-    } else if (ageDiff <= 10) {
-      score += 10;
-      reasons.push('Age compatible');
+    let ageScore = 0;
+    let ageDetails = [];
+    
+    if (ageDiff === 0) {
+      ageScore = 25;
+      ageDetails.push('Same age - perfect match!');
+    } else if (ageDiff <= 2) {
+      ageScore = 22;
+      ageDetails.push('Very similar age');
+    } else if (ageDiff <= 5) {
+      ageScore = 18;
+      ageDetails.push('Similar age range');
+    } else if (ageDiff <= 8) {
+      ageScore = 12;
+      ageDetails.push('Age compatible');
+    } else if (ageDiff <= 12) {
+      ageScore = 8;
+      ageDetails.push('Age difference acceptable');
+    } else {
+      ageScore = 3;
+      ageDetails.push('Significant age difference');
     }
+    
+    score += ageScore;
+    reasons.push(ageDetails[0]);
+    detailedInsights.age = { score: ageScore, details: ageDetails };
 
-    // Gender compatibility (20 points max) - simplified gender matching
+    // Enhanced Gender Compatibility (20 points max)
     const genderCompatible = (
       (user1.gender === 'Female' && user2.gender === 'Male') ||
       (user1.gender === 'Male' && user2.gender === 'Female') ||
@@ -340,47 +354,163 @@ export class SupabaseMatchingService {
       ((user1.gender === 'Male' || user1.gender === 'Female') && user2.gender === 'Non-binary')
     );
     
+    let genderScore = 0;
+    let genderDetails = [];
     if (genderCompatible) {
-      score += 20;
-      reasons.push('Gender compatible');
-    }
-
-    // Location compatibility (10 points max)
-    if (user1.city === user2.city) {
-      score += 10;
-      reasons.push('Same city');
+      genderScore = 20;
+      genderDetails.push('Gender preferences align');
     } else {
-      score += 5;
-      reasons.push('Different cities');
+      genderDetails.push('Gender preferences may not align');
     }
+    
+    score += genderScore;
+    if (genderScore > 0) reasons.push('Gender compatible');
+    detailedInsights.gender = { score: genderScore, details: genderDetails };
 
-    // Bio compatibility (5 points max)
+    // Enhanced Location Compatibility (15 points max)
+    let locationScore = 0;
+    let locationDetails = [];
+    
+    if (user1.city === user2.city) {
+      locationScore = 15;
+      locationDetails.push('Same city - easy to meet up!');
+    } else if (user1.city && user2.city) {
+      // Check if cities are in same region/state (simplified)
+      const city1Lower = user1.city.toLowerCase();
+      const city2Lower = user2.city.toLowerCase();
+      
+      if (city1Lower.includes(city2Lower.split(' ')[0]) || city2Lower.includes(city1Lower.split(' ')[0])) {
+        locationScore = 10;
+        locationDetails.push('Nearby cities');
+      } else {
+        locationScore = 5;
+        locationDetails.push('Different cities');
+      }
+    } else {
+      locationDetails.push('Location information incomplete');
+    }
+    
+    score += locationScore;
+    if (locationScore > 0) reasons.push(locationDetails[0]);
+    detailedInsights.location = { score: locationScore, details: locationDetails };
+
+    // Enhanced Bio Compatibility (10 points max)
+    let bioScore = 0;
+    let bioDetails = [];
+    
     if (user1.bio && user2.bio) {
-      const user1BioWords = user1.bio.toLowerCase().split(' ');
-      const user2BioWords = user2.bio.toLowerCase().split(' ');
-      const commonBioWords = user1BioWords.filter(word => 
-        word.length > 3 && user2BioWords.includes(word)
-      );
+      const user1BioWords = user1.bio.toLowerCase().split(/\W+/).filter(word => word.length > 3);
+      const user2BioWords = user2.bio.toLowerCase().split(/\W+/).filter(word => word.length > 3);
+      const commonBioWords = user1BioWords.filter(word => user2BioWords.includes(word));
       
       if (commonBioWords.length > 0) {
-        score += 5;
-        reasons.push('Similar interests in bio');
+        bioScore = Math.min(commonBioWords.length * 2, 10);
+        bioDetails.push(`Similar language and interests in bio`);
+      } else {
+        bioDetails.push('Different bio styles');
       }
+    } else {
+      bioDetails.push('Bio information incomplete');
     }
+    
+    score += bioScore;
+    if (bioScore > 0) reasons.push('Similar interests in bio');
+    detailedInsights.bio = { score: bioScore, details: bioDetails };
 
-    // Random bonus for variety (5 points max)
-    const randomBonus = Math.floor(Math.random() * 6);
-    score += randomBonus;
-    if (randomBonus > 0) {
+    // Lifestyle Compatibility (10 points max)
+    let lifestyleScore = 0;
+    let lifestyleDetails = [];
+    
+    // Analyze interests for lifestyle patterns
+    const activeInterests = ['Sports', 'Fitness', 'Hiking', 'Running', 'Swimming', 'Cycling', 'Yoga'];
+    const creativeInterests = ['Art', 'Music', 'Writing', 'Photography', 'Design', 'Crafting'];
+    const socialInterests = ['Travel', 'Parties', 'Socializing', 'Networking', 'Events'];
+    const intellectualInterests = ['Reading', 'Learning', 'Science', 'Technology', 'Philosophy'];
+    
+    const user1Active = user1Interests.some(i => activeInterests.includes(i));
+    const user2Active = user2Interests.some(i => activeInterests.includes(i));
+    const user1Creative = user1Interests.some(i => creativeInterests.includes(i));
+    const user2Creative = user2Interests.some(i => creativeInterests.includes(i));
+    const user1Social = user1Interests.some(i => socialInterests.includes(i));
+    const user2Social = user2Interests.some(i => socialInterests.includes(i));
+    const user1Intellectual = user1Interests.some(i => intellectualInterests.includes(i));
+    const user2Intellectual = user2Interests.some(i => intellectualInterests.includes(i));
+    
+    let lifestyleMatches = 0;
+    if (user1Active && user2Active) { lifestyleMatches++; lifestyleDetails.push('Both enjoy active lifestyles'); }
+    if (user1Creative && user2Creative) { lifestyleMatches++; lifestyleDetails.push('Both have creative interests'); }
+    if (user1Social && user2Social) { lifestyleMatches++; lifestyleDetails.push('Both enjoy social activities'); }
+    if (user1Intellectual && user2Intellectual) { lifestyleMatches++; lifestyleDetails.push('Both have intellectual pursuits'); }
+    
+    lifestyleScore = Math.min(lifestyleMatches * 3, 10);
+    score += lifestyleScore;
+    if (lifestyleScore > 0) reasons.push('Compatible lifestyle');
+    detailedInsights.lifestyle = { score: lifestyleScore, details: lifestyleDetails };
+
+    // Personality Compatibility (5 points max)
+    let personalityScore = 0;
+    let personalityDetails = [];
+    
+    // Analyze bio for personality indicators
+    const personalityWords = {
+      adventurous: ['adventure', 'explore', 'travel', 'new', 'exciting', 'spontaneous'],
+      caring: ['care', 'help', 'support', 'kind', 'compassionate', 'nurturing'],
+      funny: ['funny', 'humor', 'joke', 'laugh', 'comedy', 'wit'],
+      ambitious: ['goal', 'success', 'career', 'achieve', 'motivated', 'driven'],
+      romantic: ['romance', 'love', 'relationship', 'intimate', 'passionate']
+    };
+    
+    let personalityMatches = 0;
+    Object.keys(personalityWords).forEach(trait => {
+      const user1HasTrait = personalityWords[trait].some(word => 
+        user1.bio && user1.bio.toLowerCase().includes(word)
+      );
+      const user2HasTrait = personalityWords[trait].some(word => 
+        user2.bio && user2.bio.toLowerCase().includes(word)
+      );
+      
+      if (user1HasTrait && user2HasTrait) {
+        personalityMatches++;
+        personalityDetails.push(`Both seem ${trait}`);
+      }
+    });
+    
+    personalityScore = Math.min(personalityMatches * 2, 5);
+    score += personalityScore;
+    if (personalityScore > 0) reasons.push('Compatible personalities');
+    detailedInsights.personality = { score: personalityScore, details: personalityDetails };
+
+    // Chemistry Bonus (5 points max)
+    const chemistryBonus = Math.floor(Math.random() * 6);
+    score += chemistryBonus;
+    if (chemistryBonus > 0) {
       reasons.push('Great chemistry potential');
     }
 
-    return { score, reasons };
+    // Calculate final percentage
+    const maxPossibleScore = 35 + 25 + 20 + 15 + 10 + 10 + 5 + 5; // 125 max
+    const percentage = Math.round((score / maxPossibleScore) * 100);
+
+    return { 
+      score: percentage, 
+      reasons, 
+      detailedInsights,
+      breakdown: {
+        interests: interestScore,
+        age: ageScore,
+        gender: genderScore,
+        location: locationScore,
+        bio: bioScore,
+        lifestyle: lifestyleScore,
+        personality: personalityScore,
+        chemistry: chemistryBonus
+      }
+    };
   }
 
   // Create a match between two users
-  async createMatch(user1Id, user2Id, score, reasons) {
-    console.log(`🗄️ Creating match in database: ${user1Id} <-> ${user2Id} (Score: ${score})`);
+  async createMatch(user1Id, user2Id, score, reasons, detailedInsights = null, breakdown = null) {
+    console.log(`🗄️ Creating match in database: ${user1Id} <-> ${user2Id} (Score: ${score}%)`);
     
     // Ensure user1_id < user2_id for the constraint
     const [user1, user2] = user1Id < user2Id ? [user1Id, user2Id] : [user2Id, user1Id];
@@ -400,11 +530,7 @@ export class SupabaseMatchingService {
           status: 'pending',
           expires_at: expiresAt.toISOString()
         })
-        .select(`
-          *,
-          user1:profiles!matches_user1_id_fkey(name, age, city, bio, avatar_type, avatar_emoji),
-          user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
-        `)
+        .select('*')
         .single();
 
       if (error) {
@@ -421,7 +547,17 @@ export class SupabaseMatchingService {
       console.log('✅ Match created successfully in database:', match.id);
       
       // Get the matched user data for the UI
-      const matchedUser = user1 === user1Id ? match.user2 : match.user1;
+      const matchedUserId = user1 === user1Id ? user2 : user1;
+      const { data: matchedUserProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('user_id, name, age, city, bio, avatar_type, avatar_emoji')
+        .eq('user_id', matchedUserId)
+        .single();
+
+      if (profileError) {
+        console.error('Error getting matched user profile:', profileError);
+        return null;
+      }
       
       const matchObj = {
         id: match.id,
@@ -431,14 +567,16 @@ export class SupabaseMatchingService {
         user2Decision: match.user2_decision,
         matchScore: match.match_score,
         matchReasons: match.match_reasons,
+        detailedInsights: detailedInsights,
+        breakdown: breakdown,
         matchedUser: {
-          id: matchedUser.user_id,
-          name: matchedUser.name,
-          age: matchedUser.age,
-          city: matchedUser.city,
-          bio: matchedUser.bio,
-          avatar_type: matchedUser.avatar_type,
-          avatar_emoji: matchedUser.avatar_emoji
+          id: matchedUserProfile.user_id,
+          name: matchedUserProfile.name,
+          age: matchedUserProfile.age,
+          city: matchedUserProfile.city,
+          bio: matchedUserProfile.bio,
+          avatar_type: matchedUserProfile.avatar_type,
+          avatar_emoji: matchedUserProfile.avatar_emoji
         },
         createdAt: new Date(match.created_at),
         status: match.status,
@@ -533,11 +671,7 @@ export class SupabaseMatchingService {
     try {
       const { data: matches, error } = await supabase
         .from('matches')
-        .select(`
-          *,
-          user1:profiles!matches_user1_id_fkey(name, age, city, bio, avatar_type, avatar_emoji),
-          user2:profiles!matches_user2_id_fkey(name, age, city, bio, avatar_type, avatar_emoji)
-        `)
+        .select('*')
         .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
         .order('created_at', { ascending: false });
 
@@ -554,69 +688,93 @@ export class SupabaseMatchingService {
 
       console.log(`✅ Found ${matches.length} matches in database for user ${userId}`);
 
+      if (matches.length === 0) {
+        return [];
+      }
+
+      // Get profiles for all matched users
+      const userIds = matches.flatMap(match => [match.user1_id, match.user2_id]);
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, name, age, city, bio, avatar_type, avatar_emoji')
+        .in('user_id', userIds);
+
+      if (profilesError) {
+        console.error('Error fetching profiles for match history:', profilesError);
+        return [];
+      }
+
+      // Create a map of user_id to profile for quick lookup
+      const profileMap = profiles.reduce((acc, profile) => {
+        acc[profile.user_id] = profile;
+        return acc;
+      }, {});
+
       // For each unique match pair, show only the match where the current user is user1
       const uniqueMatches = [];
       const processedPairs = new Set();
       
       matches.forEach(match => {
-      // Create a unique key for the match pair (sorted to avoid duplicates)
-      const pairKey = [match.user1_id, match.user2_id].sort().join('_');
-      
-      if (!processedPairs.has(pairKey)) {
-        processedPairs.add(pairKey);
+        // Create a unique key for the match pair (sorted to avoid duplicates)
+        const pairKey = [match.user1_id, match.user2_id].sort().join('_');
         
-        // Keep the original match structure, just ensure matchedUser is populated correctly
-        let matchedUserData;
-        if (match.user1_id === userId) {
-          // Current user is user1 (sent the match), matchedUser should be user2
-          matchedUserData = match.user2 ? {
-            id: match.user2.user_id,
-            name: match.user2.name,
-            age: match.user2.age,
-            city: match.user2.city,
-            bio: match.user2.bio,
-            avatar: {
-              type: match.user2.avatar_type,
-              emoji: match.user2.avatar_emoji
-            }
-          } : {
-            id: match.user2_id,
-            name: `User ${match.user2_id.slice(0, 8)}...`,
-            avatar: { emoji: '👤' }
-          };
-        } else {
-          // Current user is user2 (received the match), matchedUser should be user1
-          matchedUserData = match.user1 ? {
-            id: match.user1.user_id,
-            name: match.user1.name,
-            age: match.user1.age,
-            city: match.user1.city,
-            bio: match.user1.bio,
-            avatar: {
-              type: match.user1.avatar_type,
-              emoji: match.user1.avatar_emoji
-            }
-          } : {
-            id: match.user1_id,
-            name: `User ${match.user1_id.slice(0, 8)}...`,
-            avatar: { emoji: '👤' }
-          };
-        }
+        if (!processedPairs.has(pairKey)) {
+          processedPairs.add(pairKey);
+          
+          // Keep the original match structure, just ensure matchedUser is populated correctly
+          let matchedUserData;
+          if (match.user1_id === userId) {
+            // Current user is user1 (sent the match), matchedUser should be user2
+            const user2Profile = profileMap[match.user2_id];
+            matchedUserData = user2Profile ? {
+              id: user2Profile.user_id,
+              name: user2Profile.name,
+              age: user2Profile.age,
+              city: user2Profile.city,
+              bio: user2Profile.bio,
+              avatar: {
+                type: user2Profile.avatar_type,
+                emoji: user2Profile.avatar_emoji
+              }
+            } : {
+              id: match.user2_id,
+              name: `User ${match.user2_id.slice(0, 8)}...`,
+              avatar: { emoji: '👤' }
+            };
+          } else {
+            // Current user is user2 (received the match), matchedUser should be user1
+            const user1Profile = profileMap[match.user1_id];
+            matchedUserData = user1Profile ? {
+              id: user1Profile.user_id,
+              name: user1Profile.name,
+              age: user1Profile.age,
+              city: user1Profile.city,
+              bio: user1Profile.bio,
+              avatar: {
+                type: user1Profile.avatar_type,
+                emoji: user1Profile.avatar_emoji
+              }
+            } : {
+              id: match.user1_id,
+              name: `User ${match.user1_id.slice(0, 8)}...`,
+              avatar: { emoji: '👤' }
+            };
+          }
 
-        uniqueMatches.push({
-          id: match.id,
-          user1Id: match.user1_id,
-          user2Id: match.user2_id,
-          user1Decision: match.user1_decision,
-          user2Decision: match.user2_decision,
-          matchScore: match.match_score,
-          matchReasons: match.match_reasons,
-          matchedUser: matchedUserData,
-          createdAt: new Date(match.created_at),
-          status: match.status,
-          expiresAt: new Date(match.expires_at)
-        });
-      }
+          uniqueMatches.push({
+            id: match.id,
+            user1Id: match.user1_id,
+            user2Id: match.user2_id,
+            user1Decision: match.user1_decision,
+            user2Decision: match.user2_decision,
+            matchScore: match.match_score,
+            matchReasons: match.match_reasons,
+            matchedUser: matchedUserData,
+            createdAt: new Date(match.created_at),
+            status: match.status,
+            expiresAt: new Date(match.expires_at)
+          });
+        }
       });
       
       return uniqueMatches;
@@ -703,33 +861,40 @@ export class SupabaseMatchingService {
 
   // Create notification for mutual match
   async createMutualMatchNotification(match) {
-    const notifications = [
-      {
-        user_id: match.user1_id,
-        type: 'mutual_match',
-        title: 'Mutual Match! 🎉',
-        message: 'Congratulations! You both accepted each other.',
-        match_id: match.id,
-        matched_user_id: match.user2_id,
-        is_read: false
-      },
-      {
-        user_id: match.user2_id,
-        type: 'mutual_match',
-        title: 'Mutual Match! 🎉',
-        message: 'Congratulations! You both accepted each other.',
-        match_id: match.id,
-        matched_user_id: match.user1_id,
-        is_read: false
+    try {
+      console.log(`🔔 Creating mutual match notifications for match ${match.id}`);
+      
+      // Create notifications for both users
+      const notifications = [
+        {
+          user_id: match.user1_id,
+          type: 'mutual_match',
+          title: '🎉 Mutual Match!',
+          message: 'You both accepted each other! Start chatting now.',
+          data: { match_id: match.id },
+          is_read: false
+        },
+        {
+          user_id: match.user2_id,
+          type: 'mutual_match',
+          title: '🎉 Mutual Match!',
+          message: 'You both accepted each other! Start chatting now.',
+          data: { match_id: match.id },
+          is_read: false
+        }
+      ];
+
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notifications);
+
+      if (error) {
+        console.error('❌ Error creating mutual match notifications:', error);
+      } else {
+        console.log('✅ Mutual match notifications created successfully');
       }
-    ];
-
-    const { error } = await supabase
-      .from('notifications')
-      .insert(notifications);
-
-    if (error) {
-      console.error('Error creating mutual match notifications:', error);
+    } catch (error) {
+      console.error('❌ Error in createMutualMatchNotification:', error);
     }
   }
 }

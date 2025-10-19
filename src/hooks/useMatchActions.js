@@ -8,74 +8,65 @@ const TOAST_DURATIONS = {
   INFO: 3000
 };
 
-export const useMatchActions = (currentUser, isOnline, loadMatchHistory, loadNotifications) => {
+export const useMatchActions = (currentUser, loadMatchHistory, loadNotifications) => {
   const [isMatching, setIsMatching] = useState(false);
   const [currentMatch, setCurrentMatch] = useState(null);
   const [showMatchModal, setShowMatchModal] = useState(false);
 
   const populateMatchedUser = useCallback((match) => {
     // Helper function to populate matched user data for the modal
+    // Handle both old structure (with matchedUser) and new structure (user data directly in match)
+    const userData = match.matchedUser || match;
+    
     return {
-      id: match.matchedUser?.id || match.user2Id,
-      name: match.matchedUser?.name || 'Unknown User',
-      age: match.matchedUser?.age || 25,
-      city: match.matchedUser?.city || 'Unknown',
-      bio: match.matchedUser?.bio || 'No bio available',
-      avatar_type: match.matchedUser?.avatar_type || 'emoji',
-      avatar_emoji: match.matchedUser?.avatar_emoji || '👤',
-      matchScore: match.matchScore,
-      matchReasons: match.matchReasons || ['Great compatibility!']
+      // Match metadata
+      id: match.id,
+      user1_id: match.user1_id,
+      user2_id: match.user2_id,
+      status: match.status,
+      user1_decision: match.user1_decision,
+      user2_decision: match.user2_decision,
+      expires_at: match.expires_at,
+      
+      // User data (either from matchedUser or directly from match)
+      matchedUser: {
+        id: userData.id || userData.user_id,
+        name: userData.name || 'Unknown User',
+        age: userData.age || 25,
+        city: userData.city || 'Unknown',
+        bio: userData.bio || 'No bio available',
+        avatar_type: userData.avatar_type || 'emoji',
+        avatar_emoji: userData.avatar_emoji || '👤',
+        interests: userData.interests || [],
+        gender: userData.gender,
+        pronouns: userData.pronouns
+      },
+      
+      // Compatibility data
+      matchScore: match.matchScore || match.score || 0,
+      matchReasons: match.matchReasons || match.reasons || ['Great compatibility!'],
+      detailedInsights: match.detailedInsights || match.detailed_insights || {},
+      breakdown: match.breakdown || match.compatibility_breakdown || {}
     };
   }, []);
 
   const findMatches = useCallback(async () => {
     console.log('🎯 Match Me button clicked!');
     console.log('🔍 Current user:', currentUser);
-    console.log('🔍 Is online:', isOnline);
     
-    if (!currentUser?.id || !isOnline) {
-      console.log('❌ Cannot find matches - user not online or no user ID');
+    if (!currentUser?.id) {
+      console.log('❌ Cannot find matches - no user ID');
       return;
     }
     
-    console.log('✅ Starting match finding process...');
+    console.log('✅ Starting fresh match finding process...');
     setIsMatching(true);
     
     try {
       const matchingService = getMatchingService();
       
-      // Check if user already has an active sent match
-      console.log('🔍 Checking for active sent matches...');
-      const hasActiveMatch = await matchingService.hasActiveSentMatch(currentUser.id);
-      console.log('✅ Active match check result:', hasActiveMatch);
-      
-      if (hasActiveMatch) {
-        console.log('⚠️ User already has an active match');
-        window.showToast(
-          '⚠️ You already have a pending match. Wait for a response or it to expire before matching again.',
-          'warning',
-          TOAST_DURATIONS.WARNING
-        );
-        setIsMatching(false);
-        return;
-      }
-      
-      // Check if there are any pending matches waiting for this user's decision
-      console.log('🔍 Checking for pending matches...');
-      const pendingMatches = await matchingService.getPendingMatches(currentUser.id);
-      console.log('✅ Pending matches result:', pendingMatches);
-      
-      if (pendingMatches.length > 0) {
-        console.log(`✅ User ${currentUser.id} has ${pendingMatches.length} pending matches waiting for decision`);
-        const bestMatch = pendingMatches[0];
-        setCurrentMatch(populateMatchedUser(bestMatch));
-        setShowMatchModal(true);
-        setIsMatching(false);
-        return;
-      }
-      
-      // Find new matches and create them in the database
-      console.log('🔍 Finding new matches...');
+      // Always generate fresh matches - no checking for existing matches
+      console.log('🔍 Generating fresh matches...');
       const newMatches = await matchingService.findMatches(currentUser.id);
       console.log('✅ New matches result:', newMatches);
       
@@ -83,14 +74,21 @@ export const useMatchActions = (currentUser, isOnline, loadMatchHistory, loadNot
         console.log(`Found ${newMatches.length} new matches`);
         const bestMatch = newMatches[0];
         console.log('New match:', bestMatch);
-        setCurrentMatch(populateMatchedUser(bestMatch));
-        setShowMatchModal(true);
         
-        // Reload data after a short delay
-        setTimeout(() => {
-          loadMatchHistory();
-          loadNotifications();
-        }, 1000);
+        // Check if the match is valid before proceeding
+        if (bestMatch && bestMatch.matchedUser) {
+          setCurrentMatch(populateMatchedUser(bestMatch));
+          setShowMatchModal(true);
+          
+          // Reload data after a short delay
+          setTimeout(() => {
+            loadMatchHistory();
+            loadNotifications();
+          }, 1000);
+        } else {
+          console.log('⚠️ Invalid match object received');
+          window.showToast('❌ Failed to create match. Please try again.', 'error', TOAST_DURATIONS.ERROR);
+        }
       } else {
         // No matches found
         console.log('⚠️  No matches found');
@@ -103,25 +101,8 @@ export const useMatchActions = (currentUser, isOnline, loadMatchHistory, loadNot
       console.log('🏁 Match finding process completed');
       setIsMatching(false);
     }
-  }, [currentUser, isOnline, populateMatchedUser, loadMatchHistory, loadNotifications]);
+  }, [currentUser, populateMatchedUser, loadMatchHistory, loadNotifications]);
 
-  const goOnline = useCallback(async () => {
-    if (!currentUser?.id) return;
-    
-    setIsMatching(true);
-    
-    try {
-      const matchingService = getMatchingService();
-      await matchingService.goOnline(currentUser.id);
-      await loadMatchHistory();
-      window.showToast('🟢 You are now online and looking for matches!', 'success', TOAST_DURATIONS.SUCCESS);
-    } catch (error) {
-      console.error('Failed to go online:', error);
-      window.showToast('❌ Failed to go online. Please try again.', 'error', TOAST_DURATIONS.ERROR);
-    } finally {
-      setIsMatching(false);
-    }
-  }, [currentUser, loadMatchHistory]);
 
   return {
     isMatching,
@@ -130,7 +111,6 @@ export const useMatchActions = (currentUser, isOnline, loadMatchHistory, loadNot
     setCurrentMatch,
     setShowMatchModal,
     findMatches,
-    goOnline,
     populateMatchedUser
   };
 };

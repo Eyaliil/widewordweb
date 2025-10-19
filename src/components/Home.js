@@ -5,14 +5,14 @@ import NotificationCenter from './NotificationCenter';
 import ToastManager from './ToastManager';
 import Header from './Home/Header';
 import MatchesSidebar from './Home/MatchesSidebar';
-import OnlineUsersSidebar from './Home/OnlineUsersSidebar';
 import MainContent from './Home/MainContent';
 import ProfileEditPage from './ProfileEditPage';
-import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import ProfilePage from './ProfilePage';
+import MessagingPanel from './MessagingPanel';
 import { useMatchHistory } from '../hooks/useMatchHistory';
 import { useMatchActions } from '../hooks/useMatchActions';
 
-const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProfile, onEditPreferences, onLogout }) => {
+const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences, onLogout }) => {
   // Auth context
   const { user, currentUser, databaseUsers, isUsingDatabaseUsers } = useAuth();
   
@@ -20,6 +20,9 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [showProfileEditPage, setShowProfileEditPage] = useState(false);
+  const [showProfilePage, setShowProfilePage] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [selectedMatchForMessaging, setSelectedMatchForMessaging] = useState(null);
 
   // Load notifications
   const loadNotifications = useCallback(async () => {
@@ -36,7 +39,6 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
   }, [currentUser]);
 
   // Custom hooks
-  const { isOnline: onlineStatus, onlineUsers, setOnline, setOffline } = useOnlineStatus(currentUser);
   const { matchHistory, hasActiveSentMatch, loadMatchHistory, loadActiveSentMatch } = useMatchHistory(currentUser);
   const { 
     isMatching, 
@@ -45,9 +47,8 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     setCurrentMatch, 
     setShowMatchModal, 
     findMatches, 
-    goOnline, 
     populateMatchedUser 
-  } = useMatchActions(currentUser, onlineStatus, loadMatchHistory, loadNotifications);
+  } = useMatchActions(currentUser, loadMatchHistory, loadNotifications);
 
   // Load notifications when user changes
   useEffect(() => {
@@ -56,10 +57,6 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     }
   }, [currentUser, loadNotifications]);
 
-  // Update parent component's isOnline state
-  useEffect(() => {
-    setIsOnline(onlineStatus);
-  }, [onlineStatus, setIsOnline]);
 
   // Profile edit handlers
   const handleEditProfileClick = useCallback(() => {
@@ -78,6 +75,26 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
 
   const handleBackFromEdit = useCallback(() => {
     setShowProfileEditPage(false);
+  }, []);
+
+  // Handle profile page navigation
+  const handleViewProfile = useCallback((match) => {
+    setSelectedMatch(match);
+    setShowProfilePage(true);
+  }, []);
+
+  const handleBackFromProfile = useCallback(() => {
+    setShowProfilePage(false);
+    setSelectedMatch(null);
+  }, []);
+
+  // Handle messaging
+  const handleSelectMatchForMessaging = useCallback((match) => {
+    setSelectedMatchForMessaging(match);
+  }, []);
+
+  const handleCloseMessaging = useCallback(() => {
+    setSelectedMatchForMessaging(null);
   }, []);
 
   // Handle match decisions
@@ -107,6 +124,28 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     }
   }, [loadMatchHistory, loadNotifications, loadActiveSentMatch]);
 
+  // Handle accept match
+  const handleAcceptMatch = useCallback((matchId) => {
+    handleMatchDecision(matchId, 'accepted');
+  }, [handleMatchDecision]);
+
+  // Handle reject match
+  const handleRejectMatch = useCallback((matchId) => {
+    handleMatchDecision(matchId, 'rejected');
+  }, [handleMatchDecision]);
+
+  // Don't render if no current user (during logout transition)
+  if (!currentUser) {
+    return (
+      <div className="h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">👋</div>
+          <p className="text-gray-600">Logging out...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Show profile edit page if requested
   if (showProfileEditPage) {
     return (
@@ -122,6 +161,20 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
     );
   }
 
+  // Show profile page if requested
+  if (showProfilePage && selectedMatch) {
+    return (
+      <div>
+        <ToastManager />
+        <ProfilePage
+          match={selectedMatch}
+          currentUser={currentUser}
+          onBack={handleBackFromProfile}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex flex-col">
       {/* Toast Manager */}
@@ -130,11 +183,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       {/* Header */}
       <Header 
         currentUser={currentUser}
-        isOnline={onlineStatus}
-        setIsOnline={setIsOnline}
         onLogout={onLogout}
-        setOnline={setOnline}
-        setOffline={setOffline}
         onEditProfile={handleEditProfileClick}
       />
 
@@ -142,7 +191,7 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
       <div className="flex-1 flex overflow-hidden">
         {/* Matches Sidebar - Left */}
         <MatchesSidebar
-          matchHistory={matchHistory}
+          matchHistory={matchHistory.filter(match => match && match.id)}
           currentUser={currentUser}
           databaseUsers={databaseUsers}
           populateMatchedUser={populateMatchedUser}
@@ -150,6 +199,10 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
           setShowMatchModal={setShowMatchModal}
           loadMatchHistory={loadMatchHistory}
           loadNotifications={loadNotifications}
+          onViewProfile={handleViewProfile}
+          onSelectForMessaging={handleSelectMatchForMessaging}
+          onAcceptMatch={handleAcceptMatch}
+          onRejectMatch={handleRejectMatch}
         />
 
         {/* Main Content Area - Center */}
@@ -157,18 +210,17 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
           <MainContent
             matchHistory={matchHistory}
             currentUser={currentUser}
-            isOnline={onlineStatus}
             isMatching={isMatching}
             hasActiveSentMatch={hasActiveSentMatch}
             findMatches={findMatches}
           />
         </div>
 
-        {/* Online Users Sidebar - Right */}
-        <OnlineUsersSidebar
-          onlineUsers={onlineUsers}
+        {/* Messaging Panel - Right */}
+        <MessagingPanel
+          selectedMatch={selectedMatchForMessaging}
           currentUser={currentUser}
-          loadOnlineStatus={setOnline} // This will trigger a refresh
+          onClose={handleCloseMessaging}
         />
       </div>
 
@@ -179,8 +231,11 @@ const Home = ({ me, avatar, isProfileComplete, isOnline, setIsOnline, onEditProf
           <MatchModal
             match={currentMatch}
             onAccept={() => handleMatchDecision(currentMatch.id, 'accepted')}
-            onDecline={() => handleMatchDecision(currentMatch.id, 'rejected')}
+            onReject={() => handleMatchDecision(currentMatch.id, 'rejected')}
             onClose={() => setShowMatchModal(false)}
+            isVisible={showMatchModal}
+            currentUserId={currentUser?.id}
+            currentUser={currentUser}
           />
         </>
       )}

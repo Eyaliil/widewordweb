@@ -2,11 +2,7 @@ import React from 'react';
 
 const Header = ({ 
   currentUser, 
-  isOnline, 
-  setIsOnline, 
   onLogout,
-  setOnline,
-  setOffline,
   onEditProfile
 }) => {
   return (
@@ -21,9 +17,6 @@ const Header = ({
             <div className="flex items-center space-x-3">
               <div>
                 <h1 className="text-lg font-semibold text-gray-900">{currentUser?.name || 'User'}</h1>
-                <p className="text-sm text-gray-500">
-                  {isOnline ? '🟢 Online' : '🔴 Offline'}
-                </p>
               </div>
               <button
                 onClick={onEditProfile}
@@ -37,27 +30,6 @@ const Header = ({
 
           {/* Right side - Action buttons */}
           <div className="flex items-center space-x-4">
-            {/* Online/Offline toggle buttons */}
-            <div className="flex items-center space-x-2">
-              {isOnline ? (
-                <button
-                  onClick={setOffline}
-                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center space-x-2"
-                >
-                  <span>🔴</span>
-                  <span>Go Offline</span>
-                </button>
-              ) : (
-                <button
-                  onClick={setOnline}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center space-x-2"
-                >
-                  <span>🟢</span>
-                  <span>Go Online</span>
-                </button>
-              )}
-            </div>
-
             {/* Logout button */}
             <button
               onClick={onLogout}

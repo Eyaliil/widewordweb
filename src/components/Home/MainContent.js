@@ -3,7 +3,6 @@ import React from 'react';
 const MainContent = ({ 
   matchHistory, 
   currentUser, 
-  isOnline, 
   isMatching, 
   hasActiveSentMatch, 
   findMatches
@@ -13,11 +12,7 @@ const MainContent = ({
       {/* Welcome Message */}
       {matchHistory.length > 0 && (
         <div className="mb-10">
-          <div className="text-center py-8">
-            <div className="text-6xl mb-4">💕</div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-2">Welcome back, {currentUser?.name}!</h3>
-            <p className="text-gray-600 mb-6">You have {matchHistory.length} matches in your history. Check the left sidebar to see them all!</p>
-          </div>
+
         </div>
       )}
 
@@ -29,14 +24,31 @@ const MainContent = ({
           Ready to find your perfect match?
         </h3>
         <p className="text-gray-600 mb-8 max-w-md mx-auto">
-          Click the button below to discover compatible users who are online right now!
+          Our advanced algorithm analyzes compatibility across interests, lifestyle, personality, and more to find you the best possible matches!
         </p>
+        
+        <div className="mb-6">
+          <div className="flex justify-center space-x-6 text-sm text-gray-500">
+            <div className="flex items-center">
+              <span className="mr-1">🎯</span>
+              <span>Smart Matching</span>
+            </div>
+            <div className="flex items-center">
+              <span className="mr-1">📊</span>
+              <span>Detailed Analysis</span>
+            </div>
+            <div className="flex items-center">
+              <span className="mr-1">💎</span>
+              <span>Quality Matches</span>
+            </div>
+          </div>
+        </div>
         
         <button
           onClick={findMatches}
-          disabled={!isOnline || isMatching || hasActiveSentMatch}
+          disabled={isMatching || hasActiveSentMatch}
           className={`px-8 py-4 rounded-full text-lg font-semibold transition-all duration-300 transform hover:scale-105 ${
-            !isOnline || isMatching || hasActiveSentMatch
+            isMatching || hasActiveSentMatch
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:from-pink-600 hover:to-purple-700 shadow-lg hover:shadow-xl'
           }`}
@@ -44,7 +56,7 @@ const MainContent = ({
           {isMatching ? (
             <span className="flex items-center space-x-2">
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              <span>Finding matches...</span>
+              <span>Analyzing compatibility...</span>
             </span>
           ) : hasActiveSentMatch ? (
             <span className="flex items-center space-x-2">
@@ -54,16 +66,12 @@ const MainContent = ({
           ) : (
             <span className="flex items-center space-x-2">
               <span>💕</span>
-              <span>Match Me</span>
+              <span>Find My Match</span>
             </span>
           )}
         </button>
         
-        {!isOnline && (
-          <p className="text-sm text-gray-500 mt-4">
-            You need to be online to find matches
-          </p>
-        )}
+        
       </div>
     </div>
   );
