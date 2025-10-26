@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { RiArrowLeftLine, RiCheckLine, RiHeart3Fill, RiUserLine, RiTeamLine, RiEmotionLine } from 'react-icons/ri';
+import { RiArrowLeftLine, RiCheckLine, RiHeart3Fill, RiUserLine, RiTeamLine, RiEmotionLine, RiCloseCircleLine } from 'react-icons/ri';
 import { supabase } from '../lib/supabaseClient';
 import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../services/lookupService';
 import { useAuth } from '../context/AuthContext';
  
- const PreferencesForm = ({ me, avatar, lookingFor, setLookingFor, onNext, onBack }) => {
+ const PreferencesForm = ({ me, avatar, lookingFor, setLookingFor, onNext, onBack, onCancel, showCancel = false }) => {
    const { updateUserProfile } = useAuth();
    // Interests (searched)
    const [selectedInterests, setSelectedInterests] = useState([]);
@@ -166,11 +166,17 @@ import { useAuth } from '../context/AuthContext';
     <div className="min-h-screen bg-[#FBEEDA] py-8">
       <div className="max-w-2xl mx-auto px-4 relative">
         <div className="flex items-center justify-between mb-8">
-          <div>
+          <div className="flex items-center gap-3">
             <button onClick={onBack} aria-label="Back" className="px-3 py-2 rounded-lg text-[#8B6E58] hover:bg-[#F9E6CA] hover:text-[#40002B] transition-colors duration-200 flex items-center gap-2">
               <RiArrowLeftLine className="text-xl" />
               <span>Back</span>
             </button>
+            {showCancel && onCancel && (
+              <button onClick={onCancel} aria-label="Cancel" className="px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center gap-2">
+                <RiCloseCircleLine className="text-xl" />
+                <span>Cancel</span>
+              </button>
+            )}
           </div>
           <button
             onClick={async () => { await handleNext(); }}

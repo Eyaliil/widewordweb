@@ -1,4 +1,36 @@
-/* Smooth Animations for WideWordWeb */
+/* Smooth Animations for Matchy */
+
+/* Logo fade-in animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+.logo-delay-1 {
+  animation-delay: 0.2s;
+}
+
+.logo-delay-2 {
+  animation-delay: 0.4s;
+}
+
+.logo-delay-3 {
+  animation-delay: 0.6s;
+}
+
+.fade-in-up-initial {
+  opacity: 0;
+}
 
 /* Page transitions */
 .fade-in {

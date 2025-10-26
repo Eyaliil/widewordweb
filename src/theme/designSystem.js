@@ -1,4 +1,4 @@
-// Design System - WideWordWeb
+// Design System - Matchy
 // Professional, elegant, warm palette with no emojis
 
 export const colors = {

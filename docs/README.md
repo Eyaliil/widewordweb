@@ -1,6 +1,6 @@
 # Documentation Index
 
-Welcome to the WideWordWeb documentation! This directory contains all the guides, schemas, and resources you need to understand, set up, and work with the dating app.
+Welcome to the Matchy documentation! This directory contains all the guides, schemas, and resources you need to understand, set up, and work with the dating app.
 
 ## 📁 Directory Structure
 

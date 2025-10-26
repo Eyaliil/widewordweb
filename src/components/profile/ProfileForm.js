@@ -4,7 +4,7 @@ import { getInterests, getPronouns, getGenders } from '../../services/lookupServ
 import { isProfileValid } from '../../utils/validation';
 import { useAuth } from '../../context/AuthContext';
 
-const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true }) => {
+const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, showBack = true, onCancel, showCancel = false }) => {
   const { updateUserProfile } = useAuth();
   const [originalInterests, setOriginalInterests] = useState(me.interests || []);
   const [interestOptions, setInterestOptions] = useState([]);
@@ -190,11 +190,17 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
     <div className="min-h-screen bg-[#FBEEDA] py-8">
       <div className="max-w-2xl mx-auto px-4 relative">
         <div className="flex items-center justify-between mb-8">
-          <div>
+          <div className="flex items-center gap-3">
             {showBack && (
               <button onClick={onBack} aria-label="Back" className="px-3 py-2 rounded-lg text-[#8B6E58] hover:bg-[#F9E6CA] hover:text-[#40002B] transition-colors duration-200 flex items-center gap-2">
                 <RiArrowLeftLine className="text-xl" />
                 <span>Back</span>
+              </button>
+            )}
+            {showCancel && onCancel && (
+              <button onClick={onCancel} aria-label="Cancel" className="px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center gap-2">
+                <RiCloseCircleLine className="text-xl" />
+                <span>Cancel</span>
               </button>
             )}
           </div>

@@ -1,7 +1,14 @@
-import React from 'react';
-import { RiCloseLine, RiCheckLine, RiCloseCircleLine, RiHeartFill, RiHeart3Fill, RiSparklingLine, RiUserLine, RiMapPinLine, RiNumbersLine, RiEmotionLine, RiGroupLine, RiTimeLine, RiFilterLine, RiHeartAddLine, RiTeamLine, RiEmotionHappyLine, RiMapPinRangeFill } from 'react-icons/ri';
+import React, { useState, useRef, useEffect } from 'react';
+import { RiCloseLine, RiCheckLine, RiCloseCircleLine, RiHeartFill, RiHeart3Fill, RiSparklingLine, RiUserLine, RiMapPinLine, RiNumbersLine, RiEmotionLine, RiGroupLine, RiTimeLine, RiFilterLine, RiHeartAddLine, RiTeamLine, RiEmotionHappyLine, RiMapPinRangeFill, RiArrowLeftSLine, RiArrowRightSLine } from 'react-icons/ri';
 
 const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUserId, currentUser }) => {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const scrollContainerRef = useRef(null);
+  
+  // Reset image index when match changes
+  useEffect(() => {
+    setCurrentImageIndex(0);
+  }, [match?.id]);
   
   if (!isVisible || !match) return null;
 
@@ -11,6 +18,10 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
   const matchReasons = match.matchReasons || match.reasons || [];
   const status = match.status || 'pending';
   
+  // Get user images
+  const userImages = matchedUser.userImages || [];
+  const hasMultipleImages = userImages.length > 1;
+  
   // Determine the current user's role in this match
   const isCurrentUser1 = match.user1_id === currentUserId;
   const currentUserDecision = isCurrentUser1 ? match.user1_decision : match.user2_decision;
@@ -19,6 +30,40 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
   // Check if this is a mutual match
   const isMutualMatch = status === 'mutual_match' || 
     (currentUserDecision === 'accepted' && otherUserDecision === 'accepted');
+  
+  // Image navigation handlers
+  const scrollToImage = (index) => {
+    if (scrollContainerRef.current) {
+      const imageElement = scrollContainerRef.current.children[index];
+      if (imageElement) {
+        imageElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        setCurrentImageIndex(index);
+      }
+    }
+  };
+
+  const scrollNext = () => {
+    if (currentImageIndex < userImages.length - 1) {
+      scrollToImage(currentImageIndex + 1);
+    }
+  };
+
+  const scrollPrevious = () => {
+    if (currentImageIndex > 0) {
+      scrollToImage(currentImageIndex - 1);
+    }
+  };
+
+  const handleScroll = () => {
+    if (scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      const scrollLeft = container.scrollLeft;
+      const imageWidth = container.children[0]?.offsetWidth || 0;
+      const gap = 16; // gap-4 = 1rem = 16px
+      const index = Math.round(scrollLeft / (imageWidth + gap));
+      setCurrentImageIndex(Math.min(index, userImages.length - 1));
+    }
+  };
   
   // Get match quality indicator
   const getMatchQuality = (score) => {
@@ -104,6 +149,91 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
 
         {/* Content */}
         <div className="p-6">
+          {/* Image Gallery - Horizontal Scroll */}
+          {userImages.length > 0 ? (
+            <div className="mb-6 relative">
+              {/* Navigation Arrows - Only show if there are multiple images */}
+              {hasMultipleImages && (
+                <>
+                  <button
+                    onClick={scrollPrevious}
+                    disabled={currentImageIndex === 0}
+                    className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg transition-all duration-200 ${
+                      currentImageIndex === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:scale-110'
+                    }`}
+                    aria-label="Previous image"
+                  >
+                    <RiArrowLeftSLine className="text-2xl text-[#7B002C]" />
+                  </button>
+                  <button
+                    onClick={scrollNext}
+                    disabled={currentImageIndex === userImages.length - 1}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg transition-all duration-200 ${
+                      currentImageIndex === userImages.length - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:scale-110'
+                    }`}
+                    aria-label="Next image"
+                  >
+                    <RiArrowRightSLine className="text-2xl text-[#7B002C]" />
+                  </button>
+                </>
+              )}
+              
+              <div 
+                ref={scrollContainerRef}
+                className={`flex gap-4 pb-4 ${
+                  hasMultipleImages && userImages.length > 2 
+                    ? 'overflow-x-auto snap-x snap-mandatory scrollbar-hide' 
+                    : 'overflow-hidden'
+                }`}
+                onScroll={handleScroll}
+              >
+                {userImages.map((image, index) => (
+                  <div key={index} className="flex-shrink-0 w-full h-80 rounded-xl overflow-hidden shadow-lg snap-center relative group">
+                    <img 
+                      src={image} 
+                      alt={`${matchedUser.name}'s photo ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    {index === 0 && (
+                      <div className="absolute top-3 left-3 bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm">
+                        Profile Picture
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Dot Indicators - Only show if there are multiple images */}
+              {hasMultipleImages && (
+                <div className="flex justify-center gap-2 mt-3">
+                  {userImages.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => scrollToImage(index)}
+                      className={`h-1.5 rounded-full transition-all duration-200 ${
+                        index === currentImageIndex 
+                          ? 'bg-[#7B002C]' 
+                          : 'bg-[#E8C99E] hover:bg-[#F9E6CA]'
+                      }`}
+                      style={{ width: index === currentImageIndex ? '24px' : '8px' }}
+                      aria-label={`Go to image ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : matchedUser.avatar?.image ? (
+            <div className="mb-6">
+              <div className="w-full h-80 rounded-xl overflow-hidden shadow-lg">
+                <img 
+                  src={matchedUser.avatar.image} 
+                  alt={matchedUser.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+          ) : null}
+
           {/* Basic Info */}
           <div className="mb-6">
             <div className="flex flex-wrap items-center gap-4 text-sm text-[#8B6E58] mb-4">

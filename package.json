@@ -1,5 +1,5 @@
 {
-  "name": "widewordweb",
+  "name": "matchy",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -21,7 +21,10 @@
     "start:3002": "PORT=3002 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "reset-db": "node scripts/reset-database.js",
+    "load-data": "node scripts/load-sample-data.js",
+    "reset-and-load": "npm run reset-db && npm run load-data"
   },
   "eslintConfig": {
     "extends": [

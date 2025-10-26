@@ -1,4 +1,4 @@
-# WideWordWeb - Dating App
+# Matchy - Dating App
 
 A modern dating application built with React, Tailwind CSS, and Supabase, featuring name-based authentication, intelligent matching, and real-time messaging.
 
@@ -14,7 +14,7 @@ A modern dating application built with React, Tailwind CSS, and Supabase, featur
 ## 📁 Project Structure
 
 ```
-widewordweb/
+matchy/
 ├── src/                    # React application source code
 │   ├── components/         # React components
 │   │   ├── auth/          # Authentication components
@@ -53,7 +53,7 @@ widewordweb/
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd widewordweb
+   cd matchy
    ```
 
 2. **Install dependencies**

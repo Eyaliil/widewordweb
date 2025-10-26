@@ -121,6 +121,8 @@ function App() {
             }}
             onBack={returnToRoomFromProfile}
             showBack={!onboarding && showBackOnProfile}
+            onCancel={onboarding ? handleLogout : undefined}
+            showCancel={onboarding}
           />
         );
       case 'preferences':
@@ -135,6 +137,8 @@ function App() {
               setCurrentView('room'); 
             }}
             onBack={goToRoom}
+            onCancel={onboarding ? handleLogout : undefined}
+            showCancel={onboarding}
           />
         );
       case 'chat':

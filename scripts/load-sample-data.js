@@ -106,6 +106,26 @@ async function loadSampleData() {
   try {
     console.log('📥 Loading sample data into database...');
     
+    // First, create users in the users table
+    console.log('👥 Creating users...');
+    const userRecords = sampleProfiles.map(profile => ({
+      id: profile.user_id,
+      name: profile.name,
+      is_active: true,
+      last_login: new Date().toISOString()
+    }));
+
+    const { error: usersError } = await supabase
+      .from('users')
+      .insert(userRecords);
+
+    if (usersError) {
+      console.error('❌ Error creating users:', usersError.message);
+      return;
+    }
+
+    console.log(`✅ Created ${userRecords.length} users`);
+    
     // Insert profiles
     console.log('👥 Inserting profiles...');
     const { data: profiles, error: profilesError } = await supabase
@@ -148,29 +168,6 @@ async function loadSampleData() {
     }
 
     console.log('✅ Added user interests');
-
-    // Add search profiles
-    console.log('🔍 Adding search profiles...');
-    
-    const searchProfiles = sampleProfiles.map(profile => ({
-      user_id: profile.user_id,
-      min_age: profile.age - 3,
-      max_age: profile.age + 5,
-      preferred_gender_ids: profile.gender_id === 1 ? [2] : [1], // Opposite gender
-      preferred_city: profile.city,
-      max_distance_km: 50,
-      is_active: true
-    }));
-
-    const { error: searchError } = await supabase
-      .from('user_search_profile')
-      .insert(searchProfiles);
-
-    if (searchError) {
-      console.error('❌ Error inserting search profiles:', searchError.message);
-    } else {
-      console.log('✅ Added search profiles');
-    }
 
     console.log('\n🎉 Sample data loaded successfully!');
     

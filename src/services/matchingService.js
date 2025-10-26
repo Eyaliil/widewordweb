@@ -392,6 +392,19 @@ export class SupabaseMatchingService {
         if (!interestsMap[ui.user_id]) interestsMap[ui.user_id] = [];
         if (ui.interests) interestsMap[ui.user_id].push(ui.interests.label);
       });
+
+      // Get user images for all users
+      const { data: userImagesData } = await supabase
+        .from('user_images')
+        .select('user_id, image_url, image_order')
+        .in('user_id', userIds)
+        .order('user_id, image_order', { ascending: true });
+
+      const imagesMap = {};
+      userImagesData?.forEach(img => {
+        if (!imagesMap[img.user_id]) imagesMap[img.user_id] = [];
+        imagesMap[img.user_id].push(img.image_url);
+      });
       
       // Get search preferences for all users
       const { data: searchProfiles } = await supabase
@@ -428,7 +441,8 @@ export class SupabaseMatchingService {
           gender: profile.gender_id ? genderMap[profile.gender_id] : null,
           pronouns: profile.pronouns_id ? pronounsMap[profile.pronouns_id] : null,
           interests: interestsMap[profile.user_id] || [],
-          preferences: searchPrefsMap[profile.user_id] || null
+          preferences: searchPrefsMap[profile.user_id] || null,
+          userImages: imagesMap[profile.user_id] || []
         };
         return acc;
       }, {});
@@ -459,6 +473,7 @@ export class SupabaseMatchingService {
               pronouns: user2Profile.pronouns,
               interests: user2Profile.interests,
               preferences: user2Profile.preferences,
+              userImages: user2Profile.userImages || [],
               avatar: {
                 type: user2Profile.avatar_type,
                 emoji: user2Profile.avatar_emoji,
@@ -483,6 +498,7 @@ export class SupabaseMatchingService {
               pronouns: user1Profile.pronouns,
               interests: user1Profile.interests,
               preferences: user1Profile.preferences,
+              userImages: user1Profile.userImages || [],
               avatar: {
                 type: user1Profile.avatar_type,
                 emoji: user1Profile.avatar_emoji,
