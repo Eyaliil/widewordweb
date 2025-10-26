@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { RiArrowLeftLine, RiCheckLine, RiHeart3Fill, RiUserLine, RiTeamLine, RiEmotionLine } from 'react-icons/ri';
 import { supabase } from '../lib/supabaseClient';
 import { getInterests, getGenders, getRelationshipTypes, getVibes } from '../services/lookupService';
 import { useAuth } from '../context/AuthContext';
@@ -150,121 +151,185 @@ import { useAuth } from '../context/AuthContext';
      }
    };
  
-   if (loading) {
-     return (
-       <div className="max-w-2xl mx-auto">
-         <div className="text-center text-gray-600">Loading your preferences...</div>
-       </div>
-     );
-   }
- 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#FBEEDA] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-[#7B002C] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-[#8B6E58]">Loading your preferences...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-     <div className="max-w-2xl mx-auto">
-      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-        <div className="py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-[#FBEEDA] py-8">
+      <div className="max-w-2xl mx-auto px-4 relative">
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <button onClick={onBack} aria-label="Back" className="px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100">
-              <span className="text-xl">←</span>
+            <button onClick={onBack} aria-label="Back" className="px-3 py-2 rounded-lg text-[#8B6E58] hover:bg-[#F9E6CA] hover:text-[#40002B] transition-colors duration-200 flex items-center gap-2">
+              <RiArrowLeftLine className="text-xl" />
+              <span>Back</span>
             </button>
           </div>
-          <div>
-            <button
-              onClick={async () => { await handleNext(); }}
-              disabled={!isDirty || saving}
-              className={`px-6 py-2 rounded-lg font-semibold transition-colors duration-200 ${
-                (!isDirty || saving)
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600'
-              }`}
-            >
-              {saving ? 'Saving...' : 'Save'}
-            </button>
+          <button
+            onClick={async () => { await handleNext(); }}
+            disabled={!isDirty || saving}
+            className={`px-6 py-2 rounded-lg font-semibold transition-all duration-250 flex items-center gap-2 ${
+              (!isDirty || saving)
+                ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white hover:shadow-lg hover:-translate-y-0.5'
+            }`}
+          >
+            {saving ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Saving...</span>
+              </>
+            ) : (
+              <>
+                <RiCheckLine className="text-lg" />
+                <span>Save</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
+          <h1 className="text-3xl font-semibold text-center text-[#40002B] mb-3">Who I'm looking for</h1>
+          <p className="text-center text-[#8B6E58] mb-8">Tell us your preferences</p>
+          {errorMsg && (
+            <div className="mb-4 px-4 py-2 rounded-lg bg-red-50 text-red-700 text-sm border-l-4 border-[#BA0105]">{errorMsg}</div>
+          )}
+ 
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-[#40002B] mb-2 flex items-center gap-2">
+                <RiUserLine />
+                <span>Genders</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {genderOptions.map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => toggleValue('genders', opt)}
+                    className={`px-3 py-1 rounded-full text-sm transition-all duration-250 ${
+                      profilePrefs.genders.includes(opt) 
+                        ? 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white shadow-md' 
+                        : 'bg-[#F9E6CA] text-[#7B002C] hover:bg-[#FDF6EB]'
+                    }`}
+                  >{opt}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[#40002B] mb-2">Age min</label>
+                <input 
+                  type="number" 
+                  min="18" 
+                  max="99" 
+                  value={profilePrefs.ageMin} 
+                  onChange={e => setProfilePrefs(p => ({ ...p, ageMin: parseInt(e.target.value)||18 }))} 
+                  className="w-full px-3 py-2 border border-[#E8C99E] rounded-lg focus:ring-2 focus:ring-[#7B002C] focus:ring-opacity-20 focus:border-[#7B002C] transition-all duration-250" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#40002B] mb-2">Age max</label>
+                <input 
+                  type="number" 
+                  min={profilePrefs.ageMin} 
+                  max="99" 
+                  value={profilePrefs.ageMax} 
+                  onChange={e => setProfilePrefs(p => ({ ...p, ageMax: parseInt(e.target.value)||p.ageMin }))} 
+                  className="w-full px-3 py-2 border border-[#E8C99E] rounded-lg focus:ring-2 focus:ring-[#7B002C] focus:ring-opacity-20 focus:border-[#7B002C] transition-all duration-250" 
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#40002B] mb-2">Max distance (km)</label>
+              <input 
+                type="number" 
+                min="0" 
+                value={profilePrefs.distanceKm} 
+                onChange={e => setProfilePrefs(p => ({ ...p, distanceKm: Math.max(0, parseInt(e.target.value)||0) }))} 
+                className="w-full px-3 py-2 border border-[#E8C99E] rounded-lg focus:ring-2 focus:ring-[#7B002C] focus:ring-opacity-20 focus:border-[#7B002C] transition-all duration-250" 
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#40002B] mb-2 flex items-center gap-2">
+                <RiHeart3Fill />
+                <span>Relationship type</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {relationshipOptions.map(opt => (
+                  <button 
+                    key={opt} 
+                    onClick={() => toggleValue('relationshipTypes', opt)} 
+                    className={`px-3 py-1 rounded-full text-sm transition-all duration-250 ${
+                      profilePrefs.relationshipTypes.includes(opt) 
+                        ? 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white shadow-md' 
+                        : 'bg-[#F9E6CA] text-[#7B002C] hover:bg-[#FDF6EB]'
+                    }`}
+                  >{opt}</button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#40002B] mb-2 flex items-center gap-2">
+                <RiEmotionLine />
+                <span>Vibe</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {vibeOptions.map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => setProfilePrefs(p => ({ ...p, vibe: p.vibe === opt ? '' : opt }))}
+                    className={`px-3 py-1 rounded-full text-sm transition-all duration-250 ${
+                      profilePrefs.vibe === opt 
+                        ? 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white shadow-md' 
+                        : 'bg-[#F9E6CA] text-[#7B002C] hover:bg-[#FDF6EB]'
+                    }`}
+                  >{opt}</button>
+                ))}
+                {vibeOptions.length === 0 && (
+                  <span className="text-sm text-[#8B6E58]">No vibes available. Seed the vibes table.</span>
+                )}
+              </div>
+            </div>
+              
+            <div>
+              <label className="block text-sm font-medium text-[#40002B] mb-2 flex items-center gap-2">
+                <RiTeamLine />
+                <span>Interests *</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {interestOptions.map(interest => (
+                  <button
+                    key={interest}
+                    onClick={() => setSelectedInterests(prev => (prev.includes(interest) ? prev.filter(i => i !== interest) : [...prev, interest]))}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-250 ${
+                      selectedInterests.includes(interest)
+                        ? 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white shadow-md'
+                        : 'bg-[#F9E6CA] text-[#7B002C] hover:bg-[#FDF6EB]'
+                    }`}
+                  >
+                    {interest}
+                  </button>
+                ))}
+                {interestOptions.length === 0 && (
+                  <span className="text-sm text-[#8B6E58]">No interests available. Seed the interests table.</span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
-       <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Who I'm looking for</h1>
-       {errorMsg && (
-         <div className="mb-4 px-4 py-2 rounded bg-red-50 text-red-700 text-sm">{errorMsg}</div>
-       )}
- 
-       <div className="space-y-6">
-          <div>
-           <label className="block text-sm font-medium text-gray-700 mb-2">Genders</label>
-            <div className="flex flex-wrap gap-2">
-             {genderOptions.map(opt => (
-                <button
-                 key={opt}
-                 onClick={() => toggleValue('genders', opt)}
-                 className={`px-3 py-1 rounded-full text-sm ${profilePrefs.genders.includes(opt) ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-               >{opt}</button>
-              ))}
-            </div>
-          </div>
- 
-         <div className="grid grid-cols-2 gap-4">
-           <div>
-             <label className="block text-sm font-medium text-gray-700 mb-2">Age min</label>
-             <input type="number" min="18" max="99" value={profilePrefs.ageMin} onChange={e => setProfilePrefs(p => ({ ...p, ageMin: parseInt(e.target.value)||18 }))} className="w-full px-3 py-2 border rounded" />
-           </div>
-          <div>
-             <label className="block text-sm font-medium text-gray-700 mb-2">Age max</label>
-             <input type="number" min={profilePrefs.ageMin} max="99" value={profilePrefs.ageMax} onChange={e => setProfilePrefs(p => ({ ...p, ageMax: parseInt(e.target.value)||p.ageMin }))} className="w-full px-3 py-2 border rounded" />
-            </div>
-          </div>
- 
-          <div>
-           <label className="block text-sm font-medium text-gray-700 mb-2">Max distance (km)</label>
-           <input type="number" min="0" value={profilePrefs.distanceKm} onChange={e => setProfilePrefs(p => ({ ...p, distanceKm: Math.max(0, parseInt(e.target.value)||0) }))} className="w-full px-3 py-2 border rounded" />
-         </div>
- 
-         <div>
-           <label className="block text-sm font-medium text-gray-700 mb-2">Relationship type</label>
-            <div className="flex flex-wrap gap-2">
-             {relationshipOptions.map(opt => (
-               <button key={opt} onClick={() => toggleValue('relationshipTypes', opt)} className={`px-3 py-1 rounded-full text-sm ${profilePrefs.relationshipTypes.includes(opt) ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{opt}</button>
-              ))}
-            </div>
-          </div>
- 
-         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Vibe</label>
-          <div className="flex flex-wrap gap-2">
-            {vibeOptions.map(opt => (
-              <button
-                key={opt}
-                onClick={() => setProfilePrefs(p => ({ ...p, vibe: p.vibe === opt ? '' : opt }))}
-                className={`px-3 py-1 rounded-full text-sm ${profilePrefs.vibe === opt ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >{opt}</button>
-            ))}
-            {vibeOptions.length === 0 && (
-              <span className="text-sm text-gray-500">No vibes available. Seed the vibes table.</span>
-            )}
-          </div>
-         </div>
-          
-         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Interests *</label>
-          <div className="flex flex-wrap gap-2">
-            {interestOptions.map(interest => (
-              <button
-                key={interest}
-                onClick={() => setSelectedInterests(prev => (prev.includes(interest) ? prev.filter(i => i !== interest) : [...prev, interest]))}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedInterests.includes(interest)
-                    ? 'bg-pink-500 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                     {interest}
-              </button>
-            ))}
-            {interestOptions.length === 0 && (
-              <span className="text-sm text-gray-500">No interests available. Seed the interests table.</span>
-            )}
-         </div>
-       </div>
-     </div>
-   </div>
+    </div>
   );
 };
  

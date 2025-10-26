@@ -15,6 +15,7 @@ function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showBackOnProfile, setShowBackOnProfile] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
+  const [chatTargetMatchId, setChatTargetMatchId] = useState(null);
 
   // Initialize user data when currentUser changes
   useEffect(() => {
@@ -46,18 +47,23 @@ function App() {
       console.log('📊 Profile complete status:', currentUser.isProfileComplete);
       
       // Determine initial view based on profile completion
-      if (!currentUser.isProfileComplete) {
-        console.log('📝 Profile incomplete - showing profile form');
-        setCurrentView('profile');
-        setOnboarding(true);
-      } else {
-        console.log('✅ Profile complete - showing home');
-        setCurrentView('room');
-        setOnboarding(false);
+      // Only auto-navigate on first load when currentView is 'login'
+      if (currentView === 'login') {
+        if (!currentUser.isProfileComplete) {
+          console.log('📝 Profile incomplete - showing profile form');
+          setCurrentView('profile');
+          setOnboarding(true);
+        } else {
+          console.log('✅ Profile complete - showing home');
+          setCurrentView('room');
+        }
       }
+      // If already in profile or preferences during onboarding, don't change
+      // This prevents useEffect from overriding user navigation
     } else {
       setCurrentView('login');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   const isProfileComplete = () => {
@@ -70,7 +76,6 @@ function App() {
     return !!(
       me.name &&
       me.age &&
-      me.city &&
       me.bio &&
       me.interests &&
       me.interests.length > 0
@@ -105,7 +110,14 @@ function App() {
             setMe={setMe}
             avatar={avatar}
             setAvatar={setAvatar}
-            onNext={onboarding ? () => setCurrentView('preferences') : returnToRoomFromProfile}
+            onNext={() => {
+              if (onboarding) {
+                console.log('🚀 Moving to preferences form');
+                setCurrentView('preferences');
+              } else {
+                returnToRoomFromProfile();
+              }
+            }}
             onBack={returnToRoomFromProfile}
             showBack={!onboarding && showBackOnProfile}
           />
@@ -127,7 +139,11 @@ function App() {
       case 'chat':
         return (
           <ChatPage
-            onBack={() => setCurrentView('room')}
+            onBack={() => {
+              setCurrentView('room');
+              setChatTargetMatchId(null);
+            }}
+            initialMatchId={chatTargetMatchId}
           />
         );
       case 'room':
@@ -150,7 +166,10 @@ function App() {
               } 
             }}
             onLogout={handleLogout}
-            onNavigateToChat={() => setCurrentView('chat')}
+            onNavigateToChat={(matchId) => {
+              setChatTargetMatchId(matchId || null);
+              setCurrentView('chat');
+            }}
           />
         );
     }

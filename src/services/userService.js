@@ -194,6 +194,33 @@ export class NameBasedUserService {
     try {
       console.log('📝 Updating profile for user:', userId);
       
+      // Check if this is a preferences update (different structure)
+      if (profileData.searchInterests !== undefined || profileData.profilePrefs !== undefined) {
+        return this.updatePreferences(userId, profileData);
+      }
+      
+      // Get gender_id and pronouns_id if gender/pronouns are provided
+      let genderId = null;
+      let pronounsId = null;
+      
+      if (profileData.gender) {
+        const { data: genderData } = await supabase
+          .from('genders')
+          .select('id')
+          .eq('label', profileData.gender)
+          .single();
+        genderId = genderData?.id || null;
+      }
+      
+      if (profileData.pronouns) {
+        const { data: pronounsData } = await supabase
+          .from('pronouns')
+          .select('id')
+          .eq('label', profileData.pronouns)
+          .single();
+        pronounsId = pronounsData?.id || null;
+      }
+      
       const { data, error } = await supabase
         .from('profiles')
         .update({
@@ -201,6 +228,8 @@ export class NameBasedUserService {
           age: profileData.age,
           city: profileData.city,
           bio: profileData.bio,
+          gender_id: genderId,
+          pronouns_id: pronounsId,
           avatar_type: profileData.avatar.type,
           avatar_emoji: profileData.avatar.emoji,
           avatar_initials: profileData.avatar.initials,
@@ -225,6 +254,106 @@ export class NameBasedUserService {
       return { success: true, profile: data };
     } catch (error) {
       console.error('❌ Error in updateProfile:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Update user preferences (search profile)
+  async updatePreferences(userId, preferencesData) {
+    try {
+      console.log('📝 Updating preferences for user:', userId);
+      
+      // Check if user_search_profile exists
+      const { data: existingProfile, error: checkError } = await supabase
+        .from('user_search_profile')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
+      const searchInterests = preferencesData.searchInterests || [];
+      const profilePrefs = preferencesData.profilePrefs || {};
+      
+      // Map gender labels to IDs if provided
+      let genderIds = [];
+      if (profilePrefs.genders && profilePrefs.genders.length > 0) {
+        const { data: gendersData } = await supabase
+          .from('genders')
+          .select('id')
+          .in('label', profilePrefs.genders);
+        genderIds = gendersData?.map(g => g.id) || [];
+      }
+
+      // Map relationship type labels to IDs if provided
+      let relationshipTypeIds = [];
+      if (profilePrefs.relationshipTypes && profilePrefs.relationshipTypes.length > 0) {
+        const { data: rTypesData } = await supabase
+          .from('relationship_types')
+          .select('id')
+          .in('label', profilePrefs.relationshipTypes);
+        relationshipTypeIds = rTypesData?.map(r => r.id) || [];
+      }
+
+      // Map vibe label to ID if provided
+      let vibeId = null;
+      if (profilePrefs.vibe) {
+        const { data: vibeData, error: vibeError } = await supabase
+          .from('vibes')
+          .select('id')
+          .eq('label', profilePrefs.vibe)
+          .single();
+        vibeId = vibeError ? null : (vibeData?.id || null);
+      }
+
+      const searchProfileData = {
+        min_age: profilePrefs.ageMin || 18,
+        max_age: profilePrefs.ageMax || 100,
+        genders: genderIds,
+        relationship_types: relationshipTypeIds,
+        vibe_id: vibeId,
+        vibe_description: profilePrefs.vibeDescription || null,
+        max_distance: profilePrefs.distanceKm || 50,
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingProfile && !checkError) {
+        // Update existing
+        const { data, error } = await supabase
+          .from('user_search_profile')
+          .update(searchProfileData)
+          .eq('user_id', userId)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('❌ Error updating search profile:', error);
+          return { success: false, error: error.message };
+        }
+      } else {
+        // Create new
+        const { data, error } = await supabase
+          .from('user_search_profile')
+          .insert({
+            user_id: userId,
+            ...searchProfileData
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('❌ Error creating search profile:', error);
+          return { success: false, error: error.message };
+        }
+      }
+
+      // Save user interests
+      if (searchInterests && searchInterests.length > 0) {
+        await this.updateUserInterests(userId, searchInterests);
+      }
+
+      console.log('✅ Preferences updated successfully');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Error in updatePreferences:', error);
       return { success: false, error: error.message };
     }
   }
@@ -278,7 +407,6 @@ export class NameBasedUserService {
     return !!(
       profileData.name &&
       profileData.age &&
-      profileData.city &&
       profileData.bio &&
       profileData.interests &&
       profileData.interests.length > 0
@@ -368,124 +496,6 @@ export class NameBasedUserService {
       return null;
     }
   }
-
-  // Get all users for matching (excludes current user and users with existing matches)
-  async getMatchingUsers(currentUserId) {
-    try {
-      // First, get all users who already have matches with the current user
-      const { data: existingMatches, error: matchesError } = await supabase
-        .from('matches')
-        .select('user1_id, user2_id')
-        .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
-
-      if (matchesError) {
-        console.error('Error fetching existing matches:', matchesError);
-        return [];
-      }
-
-      // Extract user IDs that already have matches with current user
-      const excludedUserIds = new Set();
-      existingMatches?.forEach(match => {
-        if (match.user1_id === currentUserId) {
-          excludedUserIds.add(match.user2_id);
-        } else {
-          excludedUserIds.add(match.user1_id);
-        }
-      });
-
-      console.log(`🚫 Excluding ${excludedUserIds.size} users with existing matches`);
-
-      // Get all profiles excluding current user and users with existing matches
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select(`
-          user_id,
-          name,
-          age,
-          city,
-          bio,
-          avatar_type,
-          avatar_emoji,
-          avatar_initials,
-          avatar_image_url,
-          is_profile_complete,
-          gender_id,
-          pronouns_id
-        `)
-        .eq('is_profile_complete', true)
-        .neq('user_id', currentUserId);
-      
-      // Filter out users with existing matches
-      const filteredProfiles = profiles?.filter(profile => !excludedUserIds.has(profile.user_id)) || [];
-
-      if (error) {
-        console.error('Error fetching matching users:', error);
-        return [];
-      }
-
-      // Get all user IDs for interests lookup
-      const userIds = filteredProfiles.map(p => p.user_id);
-      
-      // Get interests for all users
-      const { data: interestsData } = await supabase
-        .from('user_interests')
-        .select(`
-          user_id,
-          interest_id,
-          interests(label)
-        `)
-        .in('user_id', userIds);
-
-      // Create a map of user_id to interests
-      const interestsMap = {};
-      interestsData?.forEach(ui => {
-        if (!interestsMap[ui.user_id]) {
-          interestsMap[ui.user_id] = [];
-        }
-        interestsMap[ui.user_id].push(ui.interests.label);
-      });
-
-      // Get gender and pronouns data
-      const genderIds = [...new Set(profiles.map(p => p.gender_id).filter(Boolean))];
-      const pronounsIds = [...new Set(profiles.map(p => p.pronouns_id).filter(Boolean))];
-
-      const { data: gendersData } = await supabase
-        .from('genders')
-        .select('id, label')
-        .in('id', genderIds);
-
-      const { data: pronounsData } = await supabase
-        .from('pronouns')
-        .select('id, label')
-        .in('id', pronounsIds);
-
-      const genderMap = gendersData?.reduce((acc, g) => { acc[g.id] = g.label; return acc; }, {}) || {};
-      const pronounsMap = pronounsData?.reduce((acc, p) => { acc[p.id] = p.label; return acc; }, {}) || {};
-
-      return filteredProfiles.map(profile => ({
-        id: profile.user_id,
-        name: profile.name,
-        age: profile.age,
-        gender: genderMap[profile.gender_id] || 'Unknown',
-        pronouns: pronounsMap[profile.pronouns_id] || '',
-        city: profile.city,
-        bio: profile.bio || '',
-        avatar: {
-          type: profile.avatar_type || 'emoji',
-          emoji: profile.avatar_emoji || '👤',
-          initials: profile.avatar_initials || '',
-          image: profile.avatar_image_url || null
-        },
-        interests: interestsMap[profile.user_id] || [],
-        isProfileComplete: profile.is_profile_complete
-      }));
-    } catch (error) {
-      console.error('Error in getMatchingUsers:', error);
-      return [];
-    }
-  }
-
-
 
   // Test database connection
   async testDatabaseConnection() {

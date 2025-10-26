@@ -30,14 +30,14 @@ const ProfilePage = ({
 
   if (!match || !matchedUser) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#FBEEDA] flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl max-w-sm w-full mx-4 overflow-hidden shadow-lg p-6">
           <div className="text-center">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Profile Not Found</h2>
-            <p className="text-gray-600 mb-4">Unable to load profile details.</p>
+            <h2 className="text-xl font-semibold text-[#40002B] mb-4">Profile Not Found</h2>
+            <p className="text-[#8B6E58] mb-4">Unable to load profile details.</p>
             <button
               onClick={onBack}
-              className="w-full bg-gray-500 text-white py-3 rounded-xl hover:bg-gray-600 transition-colors font-semibold"
+              className="w-full bg-[#7B002C] text-white py-3 rounded-xl hover:bg-[#40002B] transition-colors duration-250 font-medium"
             >
               Go Back
             </button>
@@ -48,7 +48,7 @@ const ProfilePage = ({
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-[#FBEEDA]">
       {/* Header */}
       <div className="bg-white shadow-sm">
         <div className="max-w-md mx-auto px-4 py-4">
@@ -75,7 +75,7 @@ const ProfilePage = ({
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden mb-4">
           {/* Profile Header */}
           <div className="relative">
-            <div className="bg-gradient-to-br from-pink-400 via-red-400 to-orange-400 h-64 flex items-center justify-center">
+              <div className="bg-gradient-to-br from-[#7B002C] to-[#40002B] h-64 flex items-center justify-center">
               <div className="w-32 h-32 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-6xl backdrop-blur-sm">
                 {matchedUser.avatar?.emoji || matchedUser.avatar_emoji || '👤'}
               </div>
@@ -84,7 +84,6 @@ const ProfilePage = ({
             {/* Match Score Badge */}
             <div className="absolute top-4 right-4 bg-white bg-opacity-90 backdrop-blur-sm rounded-full px-3 py-2">
               <div className="flex items-center space-x-2">
-                <span className="text-lg">{matchQuality.icon}</span>
                 <span className="font-bold text-gray-800">{matchScore}%</span>
               </div>
             </div>

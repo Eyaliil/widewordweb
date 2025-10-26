@@ -1,7 +1,10 @@
 import { supabase } from '../lib/supabaseClient';
-import { userService } from './userService';
+import { scalableMatchingService } from './scalableMatchingService';
+import { redisCachingService } from './cachingService';
+import { backgroundProcessingService } from './cachingService';
+import { performanceMonitoringService } from './performanceMonitoringService';
 
-// Real Supabase matching service (for persistent data)
+// Enhanced Supabase matching service with scalable algorithm
 export class SupabaseMatchingService {
   // Check if user has an active sent match (one they initiated)
   async hasActiveSentMatch(userId) {
@@ -195,412 +198,48 @@ export class SupabaseMatchingService {
     }
   }
 
-  // Find potential matches for a user
+  // Find potential matches for a user using scalable algorithm
   async findMatches(userId) {
-    console.log(`🔍 Finding matches for user: ${userId}`);
-    
-    // Get current user's profile
-    const currentUser = await userService.getUserById(userId);
-    if (!currentUser) {
-      console.error('❌ Error fetching current user');
-      return [];
-    }
-    console.log('✅ Current user data:', currentUser);
-
-    // Get all users for matching (excludes current user and existing matches)
-    console.log('🔍 Fetching all matching users...');
-    const otherUsers = await userService.getMatchingUsers(userId);
-    console.log(`✅ Found ${otherUsers.length} users as potential matches`);
-    console.log('📋 Users details:', otherUsers.map(u => ({ id: u.id, name: u.name, interests: u.interests })));
-
-    if (otherUsers.length === 0) {
-      console.log('❌ No users available for matching (all users already matched or no complete profiles)');
-      return [];
-    }
-
-    // Calculate compatibility scores for all users
-    const allMatches = otherUsers.map(otherUser => {
-      const compatibility = this.calculateCompatibilityScore(currentUser, otherUser);
-      console.log(`Compatibility with ${otherUser.name}: ${compatibility.score}% (${compatibility.reasons.join(', ')})`);
-      return {
-        id: otherUser.id,
-        matchedUser: {
-          id: otherUser.id,
-          name: otherUser.name,
-          age: otherUser.age,
-          city: otherUser.city,
-          bio: otherUser.bio,
-          avatar_type: otherUser.avatar.type,
-          avatar_emoji: otherUser.avatar.emoji
-        },
-        matchScore: compatibility.score,
-        matchReasons: compatibility.reasons,
-        detailedInsights: compatibility.detailedInsights,
-        breakdown: compatibility.breakdown
-      };
-    });
-
-    // Sort by compatibility score (highest first)
-    allMatches.sort((a, b) => b.matchScore - a.matchScore);
-
-    // Try to find a good match (score >= 60)
-    const goodMatches = allMatches.filter(match => match.matchScore >= 60);
-    
-    if (goodMatches.length > 0) {
-      const bestMatch = goodMatches[0];
-      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}%) - Good match found!`);
-      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons, bestMatch.detailedInsights, bestMatch.breakdown);
-      return [createdMatch];
-    }
-
-    // If no good matches, try acceptable matches (score >= 40)
-    const acceptableMatches = allMatches.filter(match => match.matchScore >= 40);
-    
-    if (acceptableMatches.length > 0) {
-      const bestMatch = acceptableMatches[0];
-      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}%) - Acceptable match found!`);
-      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons, bestMatch.detailedInsights, bestMatch.breakdown);
-      return [createdMatch];
-    }
-
-    // If no acceptable matches, try any match (score >= 20)
-    const anyMatches = allMatches.filter(match => match.matchScore >= 20);
-    
-    if (anyMatches.length > 0) {
-      const bestMatch = anyMatches[0];
-      console.log(`Creating match with ${bestMatch.matchedUser.name} (score: ${bestMatch.matchScore}%) - Basic match found!`);
-      const createdMatch = await this.createMatch(userId, bestMatch.id, bestMatch.matchScore, bestMatch.matchReasons, bestMatch.detailedInsights, bestMatch.breakdown);
-      return [createdMatch];
-    }
-
-    console.log('No matches found even with lowest threshold (20)');
-    
-    return [];
-  }
-
-  // Calculate compatibility score between two users
-  calculateCompatibilityScore(user1, user2) {
-    let score = 0;
-    let reasons = [];
-    let detailedInsights = {
-      interests: { score: 0, details: [] },
-      age: { score: 0, details: [] },
-      gender: { score: 0, details: [] },
-      location: { score: 0, details: [] },
-      bio: { score: 0, details: [] },
-      lifestyle: { score: 0, details: [] },
-      personality: { score: 0, details: [] }
-    };
-
-    // Enhanced Interest Matching (35 points max)
-    const user1Interests = user1.interests || [];
-    const user2Interests = user2.interests || [];
-    const commonInterests = user1Interests.filter(interest => 
-      user2Interests.includes(interest)
-    );
-    
-    // Weighted interest scoring based on number of shared interests
-    let interestScore = 0;
-    if (commonInterests.length > 0) {
-      interestScore = Math.min(commonInterests.length * 8, 35);
-      reasons.push(`Shared ${commonInterests.length} interests: ${commonInterests.join(', ')}`);
-      detailedInsights.interests = {
-        score: interestScore,
-        details: [`You both love: ${commonInterests.join(', ')}`]
-      };
-    } else {
-      detailedInsights.interests = {
-        score: 0,
-        details: ['No shared interests found']
-      };
-    }
-    score += interestScore;
-
-    // Enhanced Age Compatibility (25 points max)
-    const ageDiff = Math.abs(user1.age - user2.age);
-    let ageScore = 0;
-    let ageDetails = [];
-    
-    if (ageDiff === 0) {
-      ageScore = 25;
-      ageDetails.push('Same age - perfect match!');
-    } else if (ageDiff <= 2) {
-      ageScore = 22;
-      ageDetails.push('Very similar age');
-    } else if (ageDiff <= 5) {
-      ageScore = 18;
-      ageDetails.push('Similar age range');
-    } else if (ageDiff <= 8) {
-      ageScore = 12;
-      ageDetails.push('Age compatible');
-    } else if (ageDiff <= 12) {
-      ageScore = 8;
-      ageDetails.push('Age difference acceptable');
-    } else {
-      ageScore = 3;
-      ageDetails.push('Significant age difference');
-    }
-    
-    score += ageScore;
-    reasons.push(ageDetails[0]);
-    detailedInsights.age = { score: ageScore, details: ageDetails };
-
-    // Enhanced Gender Compatibility (20 points max)
-    const genderCompatible = (
-      (user1.gender === 'Female' && user2.gender === 'Male') ||
-      (user1.gender === 'Male' && user2.gender === 'Female') ||
-      (user1.gender === 'Non-binary' && user2.gender === 'Non-binary') ||
-      (user1.gender === 'Non-binary' && (user2.gender === 'Male' || user2.gender === 'Female')) ||
-      ((user1.gender === 'Male' || user1.gender === 'Female') && user2.gender === 'Non-binary')
-    );
-    
-    let genderScore = 0;
-    let genderDetails = [];
-    if (genderCompatible) {
-      genderScore = 20;
-      genderDetails.push('Gender preferences align');
-    } else {
-      genderDetails.push('Gender preferences may not align');
-    }
-    
-    score += genderScore;
-    if (genderScore > 0) reasons.push('Gender compatible');
-    detailedInsights.gender = { score: genderScore, details: genderDetails };
-
-    // Enhanced Location Compatibility (15 points max)
-    let locationScore = 0;
-    let locationDetails = [];
-    
-    if (user1.city === user2.city) {
-      locationScore = 15;
-      locationDetails.push('Same city - easy to meet up!');
-    } else if (user1.city && user2.city) {
-      // Check if cities are in same region/state (simplified)
-      const city1Lower = user1.city.toLowerCase();
-      const city2Lower = user2.city.toLowerCase();
-      
-      if (city1Lower.includes(city2Lower.split(' ')[0]) || city2Lower.includes(city1Lower.split(' ')[0])) {
-        locationScore = 10;
-        locationDetails.push('Nearby cities');
-      } else {
-        locationScore = 5;
-        locationDetails.push('Different cities');
-      }
-    } else {
-      locationDetails.push('Location information incomplete');
-    }
-    
-    score += locationScore;
-    if (locationScore > 0) reasons.push(locationDetails[0]);
-    detailedInsights.location = { score: locationScore, details: locationDetails };
-
-    // Enhanced Bio Compatibility (10 points max)
-    let bioScore = 0;
-    let bioDetails = [];
-    
-    if (user1.bio && user2.bio) {
-      const user1BioWords = user1.bio.toLowerCase().split(/\W+/).filter(word => word.length > 3);
-      const user2BioWords = user2.bio.toLowerCase().split(/\W+/).filter(word => word.length > 3);
-      const commonBioWords = user1BioWords.filter(word => user2BioWords.includes(word));
-      
-      if (commonBioWords.length > 0) {
-        bioScore = Math.min(commonBioWords.length * 2, 10);
-        bioDetails.push(`Similar language and interests in bio`);
-      } else {
-        bioDetails.push('Different bio styles');
-      }
-    } else {
-      bioDetails.push('Bio information incomplete');
-    }
-    
-    score += bioScore;
-    if (bioScore > 0) reasons.push('Similar interests in bio');
-    detailedInsights.bio = { score: bioScore, details: bioDetails };
-
-    // Lifestyle Compatibility (10 points max)
-    let lifestyleScore = 0;
-    let lifestyleDetails = [];
-    
-    // Analyze interests for lifestyle patterns
-    const activeInterests = ['Sports', 'Fitness', 'Hiking', 'Running', 'Swimming', 'Cycling', 'Yoga'];
-    const creativeInterests = ['Art', 'Music', 'Writing', 'Photography', 'Design', 'Crafting'];
-    const socialInterests = ['Travel', 'Parties', 'Socializing', 'Networking', 'Events'];
-    const intellectualInterests = ['Reading', 'Learning', 'Science', 'Technology', 'Philosophy'];
-    
-    const user1Active = user1Interests.some(i => activeInterests.includes(i));
-    const user2Active = user2Interests.some(i => activeInterests.includes(i));
-    const user1Creative = user1Interests.some(i => creativeInterests.includes(i));
-    const user2Creative = user2Interests.some(i => creativeInterests.includes(i));
-    const user1Social = user1Interests.some(i => socialInterests.includes(i));
-    const user2Social = user2Interests.some(i => socialInterests.includes(i));
-    const user1Intellectual = user1Interests.some(i => intellectualInterests.includes(i));
-    const user2Intellectual = user2Interests.some(i => intellectualInterests.includes(i));
-    
-    let lifestyleMatches = 0;
-    if (user1Active && user2Active) { lifestyleMatches++; lifestyleDetails.push('Both enjoy active lifestyles'); }
-    if (user1Creative && user2Creative) { lifestyleMatches++; lifestyleDetails.push('Both have creative interests'); }
-    if (user1Social && user2Social) { lifestyleMatches++; lifestyleDetails.push('Both enjoy social activities'); }
-    if (user1Intellectual && user2Intellectual) { lifestyleMatches++; lifestyleDetails.push('Both have intellectual pursuits'); }
-    
-    lifestyleScore = Math.min(lifestyleMatches * 3, 10);
-    score += lifestyleScore;
-    if (lifestyleScore > 0) reasons.push('Compatible lifestyle');
-    detailedInsights.lifestyle = { score: lifestyleScore, details: lifestyleDetails };
-
-    // Personality Compatibility (5 points max)
-    let personalityScore = 0;
-    let personalityDetails = [];
-    
-    // Analyze bio for personality indicators
-    const personalityWords = {
-      adventurous: ['adventure', 'explore', 'travel', 'new', 'exciting', 'spontaneous'],
-      caring: ['care', 'help', 'support', 'kind', 'compassionate', 'nurturing'],
-      funny: ['funny', 'humor', 'joke', 'laugh', 'comedy', 'wit'],
-      ambitious: ['goal', 'success', 'career', 'achieve', 'motivated', 'driven'],
-      romantic: ['romance', 'love', 'relationship', 'intimate', 'passionate']
-    };
-    
-    let personalityMatches = 0;
-    Object.keys(personalityWords).forEach(trait => {
-      const user1HasTrait = personalityWords[trait].some(word => 
-        user1.bio && user1.bio.toLowerCase().includes(word)
-      );
-      const user2HasTrait = personalityWords[trait].some(word => 
-        user2.bio && user2.bio.toLowerCase().includes(word)
-      );
-      
-      if (user1HasTrait && user2HasTrait) {
-        personalityMatches++;
-        personalityDetails.push(`Both seem ${trait}`);
-      }
-    });
-    
-    personalityScore = Math.min(personalityMatches * 2, 5);
-    score += personalityScore;
-    if (personalityScore > 0) reasons.push('Compatible personalities');
-    detailedInsights.personality = { score: personalityScore, details: personalityDetails };
-
-    // Chemistry Bonus (5 points max)
-    const chemistryBonus = Math.floor(Math.random() * 6);
-    score += chemistryBonus;
-    if (chemistryBonus > 0) {
-      reasons.push('Great chemistry potential');
-    }
-
-    // Calculate final percentage
-    const maxPossibleScore = 35 + 25 + 20 + 15 + 10 + 10 + 5 + 5; // 125 max
-    const percentage = Math.round((score / maxPossibleScore) * 100);
-
-    return { 
-      score: percentage, 
-      reasons, 
-      detailedInsights,
-      breakdown: {
-        interests: interestScore,
-        age: ageScore,
-        gender: genderScore,
-        location: locationScore,
-        bio: bioScore,
-        lifestyle: lifestyleScore,
-        personality: personalityScore,
-        chemistry: chemistryBonus
-      }
-    };
-  }
-
-  // Create a match between two users
-  async createMatch(user1Id, user2Id, score, reasons, detailedInsights = null, breakdown = null) {
-    console.log(`🗄️ Creating match in database: ${user1Id} <-> ${user2Id} (Score: ${score}%)`);
-    
-    // Ensure user1_id < user2_id for the constraint
-    const [user1, user2] = user1Id < user2Id ? [user1Id, user2Id] : [user2Id, user1Id];
-    
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+    const startTime = Date.now();
     
     try {
-      const { data: match, error } = await supabase
-        .from('matches')
-        .insert({
-          user1_id: user1,
-          user2_id: user2,
-          match_score: score,
-          match_reasons: reasons,
-          user1_decision: user1 === user1Id ? 'pending' : 'pending',
-          user2_decision: user2 === user1Id ? 'pending' : 'pending',
-          status: 'pending',
-          expires_at: expiresAt.toISOString()
-        })
-        .select('*')
-        .single();
-
-      if (error) {
-        console.error('❌ Database error creating match:', error);
-        console.error('Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        
-        // Handle duplicate key constraint violation
-        if (error.code === '23505' && error.message.includes('duplicate key value violates unique constraint')) {
-          console.log('⚠️ Match already exists between these users, skipping creation');
-          return null;
-        }
-        
-        return null;
-      }
-
-      console.log('✅ Match created successfully in database:', match.id);
+      console.log(`🔍 [SCALABLE] Finding matches for user: ${userId}`);
       
-      // Get the matched user data for the UI
-      const matchedUserId = user1 === user1Id ? user2 : user1;
-      const { data: matchedUserProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('user_id, name, age, city, bio, avatar_type, avatar_emoji')
-        .eq('user_id', matchedUserId)
-        .single();
-
-      if (profileError) {
-        console.error('Error getting matched user profile:', profileError);
-        return null;
+      // Start performance monitoring
+      performanceMonitoringService.start();
+      
+      // Use the scalable matching service
+      const matches = await scalableMatchingService.findMatches(userId);
+      
+      // Record performance metrics
+      const queryTime = Date.now() - startTime;
+      performanceMonitoringService.recordQuery('findMatches', queryTime, matches.length > 0);
+      
+      if (matches.length > 0) {
+        performanceMonitoringService.recordMatch(true);
+        console.log(`✅ [SCALABLE] Found ${matches.length} matches in ${queryTime}ms`);
+      } else {
+        performanceMonitoringService.recordMatch(false);
+        console.log(`❌ [SCALABLE] No matches found in ${queryTime}ms`);
       }
       
-      const matchObj = {
-        id: match.id,
-        user1Id: match.user1_id,
-        user2Id: match.user2_id,
-        user1Decision: match.user1_decision,
-        user2Decision: match.user2_decision,
-        matchScore: match.match_score,
-        matchReasons: match.match_reasons,
-        detailedInsights: detailedInsights,
-        breakdown: breakdown,
-        matchedUser: {
-          id: matchedUserProfile.user_id,
-          name: matchedUserProfile.name,
-          age: matchedUserProfile.age,
-          city: matchedUserProfile.city,
-          bio: matchedUserProfile.bio,
-          avatar_type: matchedUserProfile.avatar_type,
-          avatar_emoji: matchedUserProfile.avatar_emoji
-        },
-        createdAt: new Date(match.created_at),
-        status: match.status,
-        expiresAt: new Date(match.expires_at)
-      };
-
-      console.log(`✅ Match object created: ${user1} <-> ${user2} (Score: ${score}) - Status: ${match.status}`);
+      return matches;
       
-      // Notify both users about the match
-      await this.notifyBothUsers(user1, user2, matchObj);
-
-      return matchObj;
-    } catch (dbError) {
-      console.error('❌ Database connection error:', dbError);
-      return null;
+    } catch (error) {
+      const queryTime = Date.now() - startTime;
+      performanceMonitoringService.recordQuery('findMatches', queryTime, false);
+      performanceMonitoringService.recordError(error, 'findMatches');
+      
+      console.error('❌ [SCALABLE] Error in findMatches:', error);
+      
+      // Return empty array if scalable matching fails
+      console.log('❌ Scalable matching failed, returning empty results');
+      return [];
     }
   }
+
+
+
 
   // Notify both users about a match
   async notifyBothUsers(user1Id, user2Id, match) {
@@ -947,10 +586,49 @@ export class SupabaseMatchingService {
 // Create service instance
 const supabaseService = new SupabaseMatchingService();
 
+// Initialize scalable services
+export const initializeScalableServices = async () => {
+  try {
+    console.log('🚀 Initializing scalable matching services...');
+    
+    // Start background processing
+    backgroundProcessingService.start();
+    
+    // Start performance monitoring
+    performanceMonitoringService.start();
+    
+    console.log('✅ Scalable services initialized successfully');
+    
+    // Log initial performance metrics
+    setTimeout(() => {
+      const metrics = performanceMonitoringService.getPerformanceSummary();
+      console.log('📊 Initial performance metrics:', metrics);
+    }, 5000);
+    
+  } catch (error) {
+    console.error('❌ Error initializing scalable services:', error);
+  }
+};
+
 // Function to get the appropriate service
 export const getMatchingService = () => {
   // Always use Supabase service for persistent data
   return supabaseService;
+};
+
+// Function to get performance metrics
+export const getPerformanceMetrics = () => {
+  return performanceMonitoringService.getDetailedReport();
+};
+
+// Function to get cache statistics
+export const getCacheStats = async () => {
+  return await redisCachingService.getCacheStats();
+};
+
+// Function to clear cache
+export const clearCache = async () => {
+  return await redisCachingService.clearAllCache();
 };
 
 // Default export

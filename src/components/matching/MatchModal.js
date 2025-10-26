@@ -1,4 +1,5 @@
 import React from 'react';
+import { RiCloseLine, RiCheckLine, RiCloseCircleLine, RiHeartFill, RiHeart3Fill, RiSparklingLine, RiUserLine, RiMapPinLine, RiNumbersLine } from 'react-icons/ri';
 
 const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUserId, currentUser }) => {
   
@@ -21,11 +22,11 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
   
   // Get match quality indicator
   const getMatchQuality = (score) => {
-    if (score >= 80) return { label: 'Excellent Match!', color: 'text-green-600', bgColor: 'bg-green-100', icon: '🔥' };
-    if (score >= 70) return { label: 'Great Match!', color: 'text-blue-600', bgColor: 'bg-blue-100', icon: '💎' };
-    if (score >= 60) return { label: 'Good Match', color: 'text-purple-600', bgColor: 'bg-purple-100', icon: '✨' };
-    if (score >= 50) return { label: 'Decent Match', color: 'text-orange-600', bgColor: 'bg-orange-100', icon: '👍' };
-    return { label: 'Potential Match', color: 'text-gray-600', bgColor: 'bg-gray-100', icon: '🤔' };
+    if (score >= 80) return { label: 'Excellent Match', color: 'text-green-700', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
+    if (score >= 70) return { label: 'Great Match', color: 'text-blue-700', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
+    if (score >= 60) return { label: 'Good Match', color: 'text-purple-700', bgColor: 'bg-purple-50', borderColor: 'border-purple-200' };
+    if (score >= 50) return { label: 'Decent Match', color: 'text-orange-700', bgColor: 'bg-orange-50', borderColor: 'border-orange-200' };
+    return { label: 'Potential Match', color: 'text-gray-700', bgColor: 'bg-gray-50', borderColor: 'border-gray-200' };
   };
 
   const matchQuality = getMatchQuality(matchScore);
@@ -36,14 +37,14 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
     console.error('MatchModal: matchedUser:', matchedUser);
     console.error('MatchModal: currentUserId:', currentUserId);
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div className="bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-2xl p-6">
           <div className="text-center">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Match Error</h2>
-            <p className="text-gray-600 mb-4">Unable to load match details. Please try again.</p>
+            <h2 className="text-xl font-semibold text-[#40002B] mb-4">Match Error</h2>
+            <p className="text-[#8B6E58] mb-4">Unable to load match details. Please try again.</p>
             <button
               onClick={onClose}
-              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+              className="bg-[#7B002C] text-white px-4 py-2 rounded-lg hover:bg-[#40002B] transition-colors duration-250"
             >
               Close
             </button>
@@ -54,32 +55,49 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl modal-enter">
         {/* Header */}
-        <div className="bg-gradient-to-r from-pink-500 to-purple-500 text-white p-6">
+        <div className="bg-gradient-to-br from-[#7B002C] to-[#40002B] text-white p-6 relative">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-2xl">
-                {matchedUser.avatar?.emoji || matchedUser.avatar_emoji || '👤'}
+            <div className="flex items-center space-x-4 flex-1">
+              {/* Avatar */}
+              <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden backdrop-blur-sm border-2 border-white border-opacity-30">
+                {matchedUser.avatar?.emoji ? (
+                  <span className="text-3xl">{matchedUser.avatar.emoji}</span>
+                ) : matchedUser.avatar?.initials ? (
+                  <span className="text-xl font-medium text-[#40002B]">{matchedUser.avatar.initials}</span>
+                ) : matchedUser.avatar?.image ? (
+                  <img src={matchedUser.avatar.image} alt={matchedUser.name} className="w-full h-full object-cover" />
+                ) : (
+                  <RiUserLine className="text-3xl" />
+                )}
               </div>
-              <div>
-                <h2 className="text-xl font-bold">{matchedUser.name}</h2>
-                <div className="flex items-center space-x-2">
-                  <span className="text-pink-100">{matchScore}% Match</span>
-                  <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                  <span className="text-sm text-pink-100">{matchQuality.label}</span>
+              
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl font-semibold mb-1">{matchedUser.name}</h2>
+                <div className="flex items-center space-x-3 text-sm">
+                  <span className="flex items-center gap-1.5 bg-white bg-opacity-20 rounded-full px-3 py-1 backdrop-blur-sm">
+                    <RiHeartFill className="text-sm" />
+                    <span className="font-medium">{matchScore}% Match</span>
+                  </span>
                 </div>
               </div>
             </div>
+            
             <button
               onClick={onClose}
-              className="text-white hover:text-pink-200 transition-colors"
+              className="text-white hover:text-white/80 transition-colors duration-200 p-2 hover:bg-white/10 rounded-lg"
+              title="Close"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <RiCloseLine className="text-2xl" />
             </button>
+          </div>
+
+          {/* Match Quality Badge */}
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${matchQuality.bgColor} ${matchQuality.borderColor} border ${matchQuality.color}`}>
+            <RiSparklingLine className="text-base" />
+            <span>{matchQuality.label}</span>
           </div>
         </div>
 
@@ -87,23 +105,36 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
         <div className="p-6">
           {/* Basic Info */}
           <div className="mb-6">
-            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-              <span>{matchedUser.age} years old</span>
-              <span>{matchedUser.city || 'Location not specified'}</span>
+            <div className="flex items-center gap-4 text-sm text-[#8B6E58] mb-4">
+              <div className="flex items-center gap-1.5">
+                <RiNumbersLine className="text-base" />
+                <span>{matchedUser.age} years old</span>
+              </div>
+              {matchedUser.city && (
+                <div className="flex items-center gap-1.5">
+                  <RiMapPinLine className="text-base" />
+                  <span>{matchedUser.city}</span>
+                </div>
+              )}
             </div>
-            <p className="text-gray-700 text-sm leading-relaxed">
-              {matchedUser.bio || 'No bio available yet.'}
-            </p>
+            <div className="bg-[#FBEEDA] rounded-xl p-4">
+              <p className="text-[#40002B] text-sm leading-relaxed">
+                {matchedUser.bio || 'No bio available yet.'}
+              </p>
+            </div>
           </div>
 
-          {/* Match Reasons */}
+          {/* Match Reasons / Shared Interests */}
           {matchReasons && matchReasons.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">Why you match</h3>
-              <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-[#40002B] mb-3 flex items-center gap-2">
+                <RiSparklingLine />
+                <span>Why you match</span>
+              </h3>
+              <div className="grid grid-cols-1 gap-2">
                 {matchReasons.slice(0, 3).map((reason, index) => (
-                  <div key={index} className="flex items-center text-gray-600 text-sm">
-                    <span className="w-1 h-1 bg-pink-400 rounded-full mr-3"></span>
+                  <div key={index} className="flex items-center text-[#7B002C] text-sm bg-[#F9E6CA] px-3 py-2 rounded-lg">
+                    <span className="w-1.5 h-1.5 bg-[#7B002C] rounded-full mr-3 flex-shrink-0"></span>
                     <span>{reason}</span>
                   </div>
                 ))}
@@ -113,54 +144,65 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
 
           {/* Action Buttons */}
           {isMutualMatch ? (
-            <div className="text-center">
-              <div className="bg-green-100 text-green-800 py-3 px-4 rounded-xl font-semibold mb-3">
-                🎉 Mutual Match! You both accepted each other!
+            <div className="space-y-3">
+              <div className="bg-green-50 border-2 border-green-200 text-green-800 py-3 px-4 rounded-xl text-center font-medium">
+                <div className="flex items-center justify-center gap-2">
+                  <RiHeart3Fill className="text-xl" />
+                  <span>Mutual Match! You both accepted each other!</span>
+                </div>
               </div>
               <button
                 onClick={onClose}
-                className="w-full bg-gray-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-gray-600 transition-colors"
+                className="w-full bg-[#7B002C] text-white py-3 px-4 rounded-xl font-medium hover:bg-[#40002B] transition-colors duration-250"
               >
                 Close
               </button>
             </div>
           ) : currentUserDecision === 'accepted' ? (
-            <div className="text-center">
-              <div className="bg-blue-100 text-blue-800 py-3 px-4 rounded-xl font-semibold mb-3">
-                ✅ You accepted this match! Waiting for their response...
+            <div className="space-y-3">
+              <div className="bg-blue-50 border-2 border-blue-200 text-blue-800 py-3 px-4 rounded-xl text-center font-medium">
+                <div className="flex items-center justify-center gap-2">
+                  <RiCheckLine className="text-xl" />
+                  <span>Waiting for their response...</span>
+                </div>
               </div>
               <button
                 onClick={onClose}
-                className="w-full bg-gray-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-gray-600 transition-colors"
+                className="w-full bg-[#7B002C] text-white py-3 px-4 rounded-xl font-medium hover:bg-[#40002B] transition-colors duration-250"
               >
                 Close
               </button>
             </div>
           ) : currentUserDecision === 'rejected' ? (
-            <div className="text-center">
-              <div className="bg-red-100 text-red-800 py-3 px-4 rounded-xl font-semibold mb-3">
-                ❌ You rejected this match
+            <div className="space-y-3">
+              <div className="bg-red-50 border-2 border-red-200 text-red-800 py-3 px-4 rounded-xl text-center font-medium">
+                <div className="flex items-center justify-center gap-2">
+                  <RiCloseCircleLine className="text-xl" />
+                  <span>You rejected this match</span>
+                </div>
               </div>
               <button
                 onClick={onClose}
-                className="w-full bg-gray-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-gray-600 transition-colors"
+                className="w-full bg-[#7B002C] text-white py-3 px-4 rounded-xl font-medium hover:bg-[#40002B] transition-colors duration-250"
               >
                 Close
               </button>
             </div>
           ) : (
-            <div className="flex space-x-3">
+            <div className="flex gap-3">
               <button
                 onClick={() => onReject(match.id)}
-                className="flex-1 bg-red-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-red-600 transition-colors"
+                className="flex-1 bg-white border-2 border-red-300 text-red-700 py-3 px-4 rounded-xl font-medium hover:bg-red-50 transition-colors duration-250 flex items-center justify-center gap-2"
               >
-                ❌ Pass
+                <RiCloseCircleLine className="text-xl" />
+                <span>Pass</span>
               </button>
               <button
                 onClick={() => onAccept(match.id)}
-                className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-green-600 transition-colors"
+                className="flex-1 bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transition-all duration-250 flex items-center justify-center gap-2"
               >
-                ✅ Like
+                <RiHeartFill className="text-xl" />
+                <span>Accept</span>
               </button>
             </div>
           )}

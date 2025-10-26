@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { RiMessage3Line, RiCloseLine, RiSendPlaneFill, RiUserLine, RiCheckFill } from 'react-icons/ri';
 import { messagingService } from '../../services/messagingService';
 
 const MessagingPanel = ({ 
@@ -186,16 +187,14 @@ const MessagingPanel = ({
 
   if (!selectedMatch) {
     return (
-      <div className="w-80 flex-shrink-0 bg-white border-l border-gray-200">
+      <div className="w-80 flex-shrink-0 bg-white border-l border-[#F9E6CA]">
         <div className="h-full flex items-center justify-center">
-          <div className="text-center text-gray-500 p-6">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
+          <div className="text-center text-[#8B6E58] p-6">
+            <div className="w-16 h-16 bg-[#F9E6CA] rounded-full flex items-center justify-center mx-auto mb-4">
+              <RiMessage3Line className="w-8 h-8 text-[#40002B]" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">Your Messages</h3>
-            <p className="text-sm text-gray-500">Select a match to start chatting</p>
+            <h3 className="text-lg font-semibold text-[#40002B] mb-2">Your Messages</h3>
+            <p className="text-sm text-[#8B6E58]">Select a match to start chatting</p>
           </div>
         </div>
       </div>
@@ -204,58 +203,56 @@ const MessagingPanel = ({
 
   const matchedUser = selectedMatch.matchedUser || selectedMatch;
 
+  // Get avatar display
+  const getAvatarDisplay = () => {
+    if (matchedUser.avatar?.emoji) return <span className="text-lg">{matchedUser.avatar.emoji}</span>;
+    if (matchedUser.avatar?.initials) return <span className="text-sm font-medium text-[#40002B]">{matchedUser.avatar.initials}</span>;
+    if (matchedUser.avatar?.image) return <img src={matchedUser.avatar.image} alt={matchedUser.name} className="w-full h-full object-cover" />;
+    if (matchedUser.avatar_emoji) return <span className="text-lg">{matchedUser.avatar_emoji}</span>;
+    return <RiUserLine className="text-lg text-[#40002B]" />;
+  };
+
   return (
-    <div className="w-80 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col h-full">
-      {/* Chat Header - Facebook Style */}
-      <div className="bg-white border-b border-gray-200 p-4">
+    <div className="w-80 flex-shrink-0 bg-white border-l border-[#F9E6CA] flex flex-col h-full">
+      {/* Chat Header */}
+      <div className="bg-white border-b border-[#F9E6CA] p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-              {matchedUser.avatar?.emoji || matchedUser.avatar_emoji || '👤'}
+            <div className="w-10 h-10 bg-[#F9E6CA] rounded-full flex items-center justify-center overflow-hidden">
+              {getAvatarDisplay()}
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 text-sm">{matchedUser.name}</h3>
+              <h3 className="font-semibold text-[#40002B] text-sm">{matchedUser.name}</h3>
               <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                <span className="text-xs text-gray-500">Active now</span>
+                <div className="w-2 h-2 bg-[#2D8532] rounded-full"></div>
+                <span className="text-xs text-[#8B6E58]">Active now</span>
               </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5-5-5h5v-5a7.5 7.5 0 00-15 0v5h5l-5 5-5-5h5v-5a7.5 7.5 0 0115 0v5z" />
-              </svg>
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-[#F9E6CA] rounded-lg transition-colors duration-200"
+          >
+            <RiCloseLine className="w-5 h-5 text-[#8B6E58]" />
+          </button>
         </div>
       </div>
 
-      {/* Messages Area - Facebook Style */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto bg-[#FBEEDA]">
         {isLoadingMessages ? (
           <div className="flex justify-center items-center h-full">
-            <div className="flex items-center space-x-2 text-gray-500">
-              <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+            <div className="flex items-center space-x-2 text-[#8B6E58]">
+              <div className="w-4 h-4 border-2 border-[#F9E6CA] border-t-[#7B002C] rounded-full animate-spin"></div>
               <span className="text-sm">Loading messages...</span>
             </div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 p-6">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
+          <div className="flex flex-col items-center justify-center h-full text-[#8B6E58] p-6">
+            <div className="w-16 h-16 bg-[#F9E6CA] rounded-full flex items-center justify-center mb-4">
+              <RiMessage3Line className="w-8 h-8 text-[#40002B]" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">No messages yet</h3>
+            <h3 className="text-lg font-semibold text-[#40002B] mb-2">No messages yet</h3>
             <p className="text-sm text-center">Start the conversation with {matchedUser.name}!</p>
           </div>
         ) : (
@@ -269,22 +266,32 @@ const MessagingPanel = ({
                 <div key={message.id} className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
                   <div className={`flex max-w-xs ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'} items-end space-x-2`}>
                     {!isCurrentUser && showAvatar && (
-                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm">{matchedUser.avatar?.emoji || matchedUser.avatar_emoji || '👤'}</span>
+                      <div className="w-8 h-8 bg-[#F9E6CA] rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {matchedUser.avatar?.emoji ? (
+                          <span className="text-sm">{matchedUser.avatar.emoji}</span>
+                        ) : matchedUser.avatar?.initials ? (
+                          <span className="text-xs font-medium text-[#40002B]">{matchedUser.avatar.initials}</span>
+                        ) : matchedUser.avatar?.image ? (
+                          <img src={matchedUser.avatar.image} alt={matchedUser.name} className="w-full h-full object-cover" />
+                        ) : matchedUser.avatar_emoji ? (
+                          <span className="text-sm">{matchedUser.avatar_emoji}</span>
+                        ) : (
+                          <RiUserLine className="text-sm text-[#40002B]" />
+                        )}
                       </div>
                     )}
                     {!isCurrentUser && !showAvatar && (
                       <div className="w-8 h-8 flex-shrink-0"></div>
                     )}
                     
-                    <div className={`px-3 py-2 rounded-2xl ${
+                    <div className={`px-4 py-2.5 rounded-2xl ${
                       isCurrentUser 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-white text-gray-900 border border-gray-200'
+                        ? 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white shadow-md' 
+                        : 'bg-white text-[#40002B] border border-[#F9E6CA]'
                     }`}>
                       <p className="text-sm leading-relaxed">{message.message}</p>
                       <p className={`text-xs mt-1 ${
-                        isCurrentUser ? 'text-blue-100' : 'text-gray-500'
+                        isCurrentUser ? 'text-white/70' : 'text-[#8B6E58]'
                       }`}>
                         {formatMessageTime(message.created_at)}
                       </p>
@@ -298,8 +305,8 @@ const MessagingPanel = ({
         )}
       </div>
 
-      {/* Message Input - Facebook Style */}
-      <div className="bg-white border-t border-gray-200 p-4">
+      {/* Message Input */}
+      <div className="bg-white border-t border-[#F9E6CA] p-4">
         <div className="flex items-end space-x-3">
           <div className="flex-1 relative">
             <textarea
@@ -307,7 +314,7 @@ const MessagingPanel = ({
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder={`Message ${matchedUser.name}...`}
-              className="w-full px-4 py-3 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="w-full px-4 py-3 border border-[#E8C99E] rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-[#7B002C] focus:ring-opacity-20 focus:border-[#7B002C] text-sm transition-all duration-250"
               rows="1"
               style={{ minHeight: '44px', maxHeight: '120px' }}
               disabled={isSendingMessage}
@@ -316,14 +323,16 @@ const MessagingPanel = ({
           <button
             onClick={sendMessage}
             disabled={!newMessage.trim() || isSendingMessage}
-            className="bg-blue-500 text-white p-3 rounded-full hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            className={`p-3 rounded-full transition-all duration-250 flex-shrink-0 shadow-md ${
+              isSendingMessage || !newMessage.trim()
+                ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white hover:shadow-lg hover:-translate-y-0.5'
+            }`}
           >
             {isSendingMessage ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
+              <RiSendPlaneFill className="w-5 h-5" />
             )}
           </button>
         </div>

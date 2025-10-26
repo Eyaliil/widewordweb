@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { RiNotification3Line } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import MatchModal from './matching/MatchModal';
 import NotificationCenter from './ui/NotificationCenter';
 import ToastManager from './ui/ToastManager';
 import Header from './Home/Header';
-import MatchesSidebar from './Home/MatchesSidebar';
 import MainContent from './Home/MainContent';
 import ProfileEditPage from './profile/ProfileEditPage';
 import ProfilePage from './profile/ProfilePage';
 import { useMatchHistory } from '../hooks/useMatchHistory';
 import { useMatchActions } from '../hooks/useMatchActions';
 
-const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences, onLogout, onNavigateToChat }) => {
+const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences, onLogout, onNavigateToChat: onNavigateToChatProp }) => {
   // Auth context
   const { user, currentUser, databaseUsers, isUsingDatabaseUsers } = useAuth();
   
@@ -127,10 +127,9 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
   // Don't render if no current user (during logout transition)
   if (!currentUser) {
     return (
-      <div className="h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
+      <div className="h-screen bg-[#FBEEDA] flex items-center justify-center">
         <div className="text-center">
-          <div className="text-4xl mb-4">👋</div>
-          <p className="text-gray-600">Logging out...</p>
+          <p className="text-[#8B6E58] text-lg">Logging out...</p>
         </div>
       </div>
     );
@@ -166,7 +165,7 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
   }
 
   return (
-    <div className="h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex flex-col">
+    <div className="h-screen bg-[#FBEEDA] flex flex-col">
       {/* Toast Manager */}
       <ToastManager />
       
@@ -175,13 +174,12 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
         currentUser={currentUser}
         onLogout={onLogout}
         onEditProfile={handleEditProfileClick}
-        onNavigateToChat={onNavigateToChat}
+        onNavigateToChat={onNavigateToChatProp}
       />
 
-      {/* Main Content - Fullscreen Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Matches Sidebar - Left */}
-        <MatchesSidebar
+      {/* Main Content - Center Layout */}
+      <div className="flex-1 overflow-hidden">
+        <MainContent
           matchHistory={matchHistory.filter(match => match && match.id)}
           currentUser={currentUser}
           databaseUsers={databaseUsers}
@@ -193,19 +191,11 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
           onViewProfile={handleViewProfile}
           onAcceptMatch={handleAcceptMatch}
           onRejectMatch={handleRejectMatch}
+          onNavigateToChat={onNavigateToChatProp}
+          isMatching={isMatching}
+          hasActiveSentMatch={hasActiveSentMatch}
+          findMatches={findMatches}
         />
-
-        {/* Main Content Area - Center */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <MainContent
-            matchHistory={matchHistory}
-            currentUser={currentUser}
-            isMatching={isMatching}
-            hasActiveSentMatch={hasActiveSentMatch}
-            findMatches={findMatches}
-          />
-        </div>
-
       </div>
 
       {/* Match Modal */}
@@ -238,11 +228,11 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
       {/* Notification Bell */}
       <button
         onClick={() => setShowNotifications(true)}
-        className="fixed bottom-6 right-6 bg-pink-500 hover:bg-pink-600 text-white rounded-full p-4 shadow-lg transition-colors z-50"
+        className="fixed bottom-6 right-6 bg-gradient-to-br from-[#7B002C] to-[#40002B] hover:from-[#40002B] hover:to-[#7B002C] text-white rounded-full p-4 shadow-lg transition-all duration-250 z-50"
       >
-        <span className="text-xl">🔔</span>
+        <RiNotification3Line className="text-xl" />
         {notificationCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+          <span className="absolute -top-2 -right-2 bg-[#BA0105] text-white text-xs font-medium rounded-full w-6 h-6 flex items-center justify-center">
             {notificationCount}
           </span>
         )}

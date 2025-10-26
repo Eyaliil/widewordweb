@@ -66,10 +66,11 @@ export class MessagingService {
     }
   }
 
-  // Get messages for a match
-  async getMessages(matchId, userId) {
+  // Get messages for a match with pagination support
+  async getMessages(matchId, userId, options = {}) {
     try {
-      console.log(`📥 Fetching messages for match ${matchId} and user ${userId}`);
+      const { limit = 50, cursor = null, older = false } = options;
+      console.log(`📥 Fetching messages for match ${matchId} (limit: ${limit}, cursor: ${cursor})`);
       
       // First verify the user is part of this match
       const { data: match, error: matchError } = await supabase
@@ -88,7 +89,8 @@ export class MessagingService {
         return [];
       }
       
-      const { data: messages, error } = await supabase
+      // Build query with pagination
+      let query = supabase
         .from('messages')
         .select(`
           id,
@@ -100,16 +102,34 @@ export class MessagingService {
           created_at,
           updated_at
         `)
-        .eq('match_id', matchId)
-        .order('created_at', { ascending: true });
+        .eq('match_id', matchId);
+      
+      // Apply cursor for pagination
+      if (cursor) {
+        if (older) {
+          // Fetch messages older than cursor
+          query = query.lt('created_at', cursor);
+        } else {
+          // Fetch messages newer than cursor
+          query = query.gt('created_at', cursor);
+        }
+      }
+      
+      // Order and limit
+      query = query.order('created_at', { ascending: older ? false : true }).limit(limit);
+
+      const { data: messages, error } = await query;
 
       if (error) {
         console.error('❌ Error fetching messages:', error);
         return [];
       }
 
-      console.log(`✅ Found ${messages.length} messages`);
-      return messages || [];
+      // Reverse if loading older messages for correct display order
+      const sortedMessages = older ? messages.reverse() : messages;
+
+      console.log(`✅ Found ${sortedMessages.length} messages`);
+      return sortedMessages || [];
     } catch (error) {
       console.error('❌ Error in getMessages:', error);
       return [];
@@ -119,24 +139,64 @@ export class MessagingService {
   // Mark messages as read
   async markMessagesAsRead(matchId, userId) {
     try {
-      const { error } = await supabase
+      // Update messages table
+      const { error: messagesError } = await supabase
         .from('messages')
         .update({ is_read: true })
         .eq('match_id', matchId)
         .eq('receiver_id', userId)
         .eq('is_read', false);
 
-      if (error) {
-        console.error('❌ Error marking messages as read:', error);
+      if (messagesError) {
+        console.error('❌ Error marking messages as read:', messagesError);
+      }
+
+      // The trigger should handle conversation updates, but we can also do it explicitly
+      const { data: conversation, error: convError } = await supabase
+        .from('conversations')
+        .select('participant1_id')
+        .eq('match_id', matchId)
+        .single();
+
+      if (!convError && conversation) {
+        const isParticipant1 = conversation.participant1_id === userId;
+        const updateData = isParticipant1 
+          ? { participant1_unread_count: 0, participant1_last_read_at: new Date().toISOString() }
+          : { participant2_unread_count: 0, participant2_last_read_at: new Date().toISOString() };
+
+        const { error: updateError } = await supabase
+          .from('conversations')
+          .update(updateData)
+          .eq('match_id', matchId);
+
+        if (updateError) {
+          console.error('❌ Error updating conversation read status:', updateError);
+        }
       }
     } catch (error) {
       console.error('❌ Error in markMessagesAsRead:', error);
     }
   }
 
-  // Get unread message count for a user
+  // Get unread message count for a user (optimized)
   async getUnreadCount(userId) {
     try {
+      // Try to use conversations table for fast count
+      const { data: conversations, error: convError } = await supabase
+        .from('conversations')
+        .select('participant1_unread_count, participant2_unread_count, participant1_id')
+        .or(`participant1_id.eq.${userId},participant2_id.eq.${userId}`);
+
+      if (!convError && conversations) {
+        const totalUnread = conversations.reduce((sum, conv) => {
+          return sum + (conv.participant1_id === userId 
+            ? conv.participant1_unread_count 
+            : conv.participant2_unread_count);
+        }, 0);
+        return totalUnread;
+      }
+
+      // Fallback to messages table if conversations table doesn't exist
       const { data, error } = await supabase
         .from('messages')
         .select('id')
@@ -200,10 +260,85 @@ export class MessagingService {
     }
   }
 
-  // Get conversation list for a user (matches with recent messages)
+  // Get conversation list for a user (optimized with conversations table)
   async getConversations(userId) {
     try {
       console.log(`📋 Fetching conversations for user ${userId}`);
+      
+      // Use the conversations table for fast loading
+      const { data: conversationsData, error: convError } = await supabase
+        .from('conversations')
+        .select(`
+          id,
+          match_id,
+          participant1_id,
+          participant2_id,
+          last_message_id,
+          last_message_text,
+          last_message_sender_id,
+          last_message_at,
+          participant1_unread_count,
+          participant2_unread_count,
+          participant1_last_read_at,
+          participant2_last_read_at
+        `)
+        .or(`participant1_id.eq.${userId},participant2_id.eq.${userId}`)
+        .order('last_message_at', { ascending: false })
+        .not('last_message_at', 'is', null);
+
+      if (convError) {
+        console.error('❌ Error fetching conversations:', convError);
+        // Fallback to old method if conversations table doesn't exist yet
+        return this.getConversationsLegacy(userId);
+      }
+
+      // Transform the data and fetch other user profiles
+      const conversations = await Promise.all(
+        conversationsData.map(async (conv) => {
+          const otherUserId = conv.participant1_id === userId 
+            ? conv.participant2_id 
+            : conv.participant1_id;
+          
+          // Get the other user's profile
+          const { data: otherUser } = await supabase
+            .from('profiles')
+            .select('user_id, name, avatar_emoji')
+            .eq('user_id', otherUserId)
+            .single();
+
+          // Get unread count for this user
+          const unreadCount = conv.participant1_id === userId 
+            ? conv.participant1_unread_count 
+            : conv.participant2_unread_count;
+
+          // Format last message
+          const lastMessage = conv.last_message_text ? {
+            message: conv.last_message_text,
+            sender_id: conv.last_message_sender_id,
+            created_at: conv.last_message_at
+          } : null;
+
+          return {
+            matchId: conv.match_id,
+            otherUser: otherUser || { user_id: otherUserId, name: 'Unknown User', avatar_emoji: '👤' },
+            lastMessage: lastMessage,
+            unreadCount: unreadCount || 0
+          };
+        })
+      );
+
+      console.log(`✅ Found ${conversations.length} conversations`);
+      return conversations;
+    } catch (error) {
+      console.error('❌ Error in getConversations:', error);
+      return [];
+    }
+  }
+
+  // Legacy method for backward compatibility
+  async getConversationsLegacy(userId) {
+    try {
+      console.log(`📋 Fetching conversations for user ${userId} (legacy method)`);
       
       // Get all mutual matches for the user
       const { data: matches, error: matchesError } = await supabase
@@ -268,9 +403,24 @@ export class MessagingService {
     }
   }
 
-  // Get unread count for a specific match
+  // Get unread count for a specific match (optimized)
   async getUnreadCountForMatch(matchId, userId) {
     try {
+      // Try to use conversations table for fast count
+      const { data: conversation, error: convError } = await supabase
+        .from('conversations')
+        .select('participant1_unread_count, participant2_unread_count, participant1_id')
+        .eq('match_id', matchId)
+        .single();
+
+      if (!convError && conversation) {
+        const unreadCount = conversation.participant1_id === userId 
+          ? conversation.participant1_unread_count 
+          : conversation.participant2_unread_count;
+        return unreadCount || 0;
+      }
+
+      // Fallback to messages table
       const { data, error } = await supabase
         .from('messages')
         .select('id')

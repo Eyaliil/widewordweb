@@ -87,11 +87,13 @@ widewordweb/
 - [Bidirectional Matching System](docs/features/BIDIRECTIONAL_MATCHING_SYSTEM.md) - Detailed matching logic
 - [Matching & Messaging Guide](docs/features/MATCHING_MESSAGING_GUIDE.md) - Complete feature overview
 - [Matching Test Guide](docs/features/MATCHING_TEST_GUIDE.md) - Testing the matching system
+- [Chat Design Improvements](docs/features/CHAT_DESIGN_IMPROVEMENTS.md) - Optimized chat architecture
 
 ### Database
 - [Clean Database Schema](docs/database/clean-database-schema.sql) - Main database schema
 - [Name-based Schema](docs/database/name-based-schema.sql) - Authentication schema
-- [Messages Table](docs/database/create-messages-table.sql) - Chat functionality schema
+- [Improved Chat Schema](docs/database/improved-chat-schema.sql) - Optimized chat design with conversations table
+- [Chat Migration Guide](docs/database/MIGRATION_GUIDE_CHAT_IMPROVEMENTS.md) - How to migrate to the improved chat design
 
 ## 🎯 Key Features
 
@@ -111,6 +113,9 @@ widewordweb/
 - Message persistence and history
 - Read/unread status tracking
 - Optimistic UI updates
+- **Optimized for performance** - Fast conversation loading with cached metadata
+- **Efficient pagination** - Cursor-based message loading
+- **Instant unread counts** - Pre-calculated counts for optimal performance
 
 ### Notifications
 - Persistent notification history

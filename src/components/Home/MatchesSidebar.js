@@ -1,4 +1,6 @@
 import React from 'react';
+import { RiChat3Line, RiHeart3Fill, RiUserLine, RiRefreshLine } from 'react-icons/ri';
+import Skeleton from '../ui/Skeleton';
 
 const MatchesSidebar = ({ 
   matchHistory, 
@@ -12,15 +14,16 @@ const MatchesSidebar = ({
   onViewProfile,
   onSelectForMessaging,
   onAcceptMatch,
-  onRejectMatch
+  onRejectMatch,
+  onNavigateToChat
 }) => {
   // Don't render if no current user
   if (!currentUser) {
     return (
-      <div className="w-80 flex-shrink-0 bg-white border-r border-gray-200">
+      <div className="w-80 flex-shrink-0 bg-white border-r border-[#F9E6CA]">
         <div className="h-full p-6 overflow-y-auto">
-          <div className="text-center py-8 text-gray-500">
-            <div className="text-4xl mb-2">👋</div>
+          <div className="text-center py-8 text-[#8B6E58]">
+            <RiUserLine className="text-4xl mx-auto mb-2 text-[#40002B]" />
             <p className="text-sm">Please log in to view matches</p>
           </div>
         </div>
@@ -29,18 +32,18 @@ const MatchesSidebar = ({
   }
 
   return (
-    <div className="w-80 flex-shrink-0 bg-white border-r border-gray-200">
+    <div className="w-80 flex-shrink-0 bg-white border-r border-[#F9E6CA]">
       <div className="h-full p-6 overflow-y-auto">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-          <span className="w-3 h-3 bg-pink-500 rounded-full mr-2"></span>
+        <h3 className="text-lg font-semibold text-[#40002B] mb-4 flex items-center">
+          <span className="w-3 h-3 bg-gradient-to-br from-[#7B002C] to-[#40002B] rounded-full mr-2"></span>
           All Matches ({matchHistory.length})
         </h3>
         
         {matchHistory.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <div className="text-4xl mb-2">💕</div>
+          <div className="text-center py-8 text-[#8B6E58]">
+            <RiHeart3Fill className="text-4xl mx-auto mb-2 text-[#40002B]" />
             <p className="text-sm">No matches yet</p>
-            <p className="text-xs text-gray-400 mt-2">Click "Match Me" to start!</p>
+            <p className="text-xs text-[#8B6E58] mt-2">Click "Match Me" to start!</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -65,14 +68,14 @@ const MatchesSidebar = ({
                 return (
                   <div 
                     key={match.id}
-                    className={`p-3 rounded-lg transition-colors ${
+                    className={`p-3 rounded-lg transition-all duration-250 stagger-item ${
                       match.status === 'mutual_match' 
                         ? 'bg-green-50 border border-green-200 hover:bg-green-100 cursor-pointer' 
                         : match.status === 'rejected'
                           ? 'bg-red-50 border border-red-200 hover:bg-red-100'
                           : match.status === 'expired'
-                            ? 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
-                            : 'bg-blue-50 border border-blue-200 hover:bg-blue-100'
+                            ? 'bg-neutral-50 border border-neutral-200 hover:bg-neutral-100'
+                            : 'bg-[#F9E6CA] border border-[#E8C99E] hover:bg-[#FDF6EB]'
                     }`}
                     onClick={() => {
                       if (match.status === 'mutual_match') {
@@ -81,12 +84,12 @@ const MatchesSidebar = ({
                     }}
                   >
                     <div className="flex items-center space-x-3 mb-2">
-                      <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center text-sm">
+                      <div className="w-8 h-8 bg-gradient-to-br from-[#7B002C] to-[#40002B] rounded-full flex items-center justify-center text-sm">
                         {matchedUserAvatar}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-800 truncate">{matchedUserName}</p>
-                        <p className="text-xs text-gray-500">{match.matchScore || match.score || 0}% match</p>
+                        <p className="font-medium text-[#40002B] truncate">{matchedUserName}</p>
+                        <p className="text-xs text-[#8B6E58]">{match.matchScore || match.score || 0}% match</p>
                       </div>
                     </div>
                     
@@ -98,26 +101,26 @@ const MatchesSidebar = ({
                             : match.status === 'rejected'
                               ? 'bg-red-100 text-red-700'
                               : match.status === 'expired'
-                                ? 'bg-gray-100 text-gray-700'
-                                : 'bg-blue-100 text-blue-700'
+                                ? 'bg-neutral-100 text-neutral-700'
+                                : 'bg-[#F9E6CA] text-[#7B002C]'
                         }`}>
-                          {match.status === 'mutual_match' ? '✅ Matched' :
-                           match.status === 'rejected' ? '❌ Rejected' :
-                           match.status === 'expired' ? '⏰ Expired' :
-                           '⏳ Pending'}
+                          {match.status === 'mutual_match' ? 'Matched' :
+                           match.status === 'rejected' ? 'Rejected' :
+                           match.status === 'expired' ? 'Expired' :
+                           'Pending'}
                         </span>
                       </div>
                       
                       <div className="space-y-1">
-                        <p className="text-gray-600">
-                          You: {userDecision === 'pending' ? '⏳' : userDecision === 'accepted' ? '✅' : '❌'}
+                        <p className="text-[#8B6E58]">
+                          You: {userDecision === 'pending' ? 'Pending' : userDecision === 'accepted' ? 'Accepted' : 'Passed'}
                         </p>
-                        <p className="text-gray-600">
-                          Them: {otherDecision === 'pending' ? '⏳' : otherDecision === 'accepted' ? '✅' : '❌'}
+                        <p className="text-[#8B6E58]">
+                          Them: {otherDecision === 'pending' ? 'Pending' : otherDecision === 'accepted' ? 'Accepted' : 'Passed'}
                         </p>
                       </div>
                       
-                      <p className="text-gray-500 mt-2">
+                      <p className="text-[#8B6E58] mt-2">
                         {new Date(match.created_at || match.createdAt).toLocaleDateString()}
                       </p>
                       
@@ -131,24 +134,40 @@ const MatchesSidebar = ({
                                 e.stopPropagation();
                                 onRejectMatch(match.id);
                               }}
-                              className="flex-1 bg-red-500 text-white text-xs py-2 px-3 rounded-lg hover:bg-red-600 transition-colors font-medium"
+                              className="flex-1 bg-white border-2 border-red-300 text-red-700 text-xs py-2 px-3 rounded-lg hover:bg-red-50 transition-all duration-250 font-medium"
                             >
-                              ❌ Pass
+                              Pass
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onAcceptMatch(match.id);
                               }}
-                              className="flex-1 bg-green-500 text-white text-xs py-2 px-3 rounded-lg hover:bg-green-600 transition-colors font-medium"
+                              className="flex-1 bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white text-xs py-2 px-3 rounded-lg hover:shadow-md transition-all duration-250 font-medium"
                             >
-                              ✅ Like
+                              Accept
                             </button>
                           </div>
                         )}
                         
                         {/* Profile and Chat buttons */}
                         <div className="flex space-x-2">
+                          {/* Show chat button for mutual matches */}
+                          {match.status === 'mutual_match' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onNavigateToChat) {
+                                  onNavigateToChat(match.id);
+                                }
+                              }}
+                              className="flex-1 bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white text-xs py-2 px-3 rounded-lg hover:shadow-md transition-all duration-250 font-medium flex items-center justify-center space-x-1"
+                            >
+                              <RiChat3Line className="text-sm" />
+                              <span>Chat</span>
+                            </button>
+                          )}
+                          
                           {/* Only show View Profile button for non-mutual matches */}
                           {match.status !== 'mutual_match' && (
                             <button
@@ -156,9 +175,10 @@ const MatchesSidebar = ({
                                 e.stopPropagation();
                                 onViewProfile(match);
                               }}
-                              className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors font-medium"
+                              className="flex-1 bg-white border-2 border-[#40002B] text-[#40002B] text-xs py-2 px-3 rounded-lg hover:bg-[#F9E6CA] transition-all duration-250 font-medium flex items-center justify-center gap-1"
                             >
-                              👤 View Profile
+                              <RiUserLine className="text-sm" />
+                              <span>View</span>
                             </button>
                           )}
                         </div>
@@ -170,15 +190,16 @@ const MatchesSidebar = ({
           </div>
         )}
         
-        <div className="mt-4 pt-4 border-t border-gray-200">
+        <div className="mt-4 pt-4 border-t border-[#F9E6CA]">
           <button
             onClick={() => {
               loadMatchHistory();
               loadNotifications();
             }}
-            className="w-full text-sm text-gray-600 hover:text-gray-800 transition-colors"
+            className="w-full text-sm text-[#8B6E58] hover:text-[#40002B] transition-colors duration-200 flex items-center justify-center gap-2"
           >
-            🔄 Refresh Matches
+            <RiRefreshLine className="text-base" />
+            <span>Refresh Matches</span>
           </button>
         </div>
       </div>
