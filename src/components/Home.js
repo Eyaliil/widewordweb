@@ -7,7 +7,7 @@ import ToastManager from './ui/ToastManager';
 import Header from './Home/Header';
 import MainContent from './Home/MainContent';
 import ProfileEditPage from './profile/ProfileEditPage';
-import ProfilePage from './profile/ProfilePage';
+
 import { useMatchHistory } from '../hooks/useMatchHistory';
 import { useMatchActions } from '../hooks/useMatchActions';
 
@@ -19,8 +19,6 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [showProfileEditPage, setShowProfileEditPage] = useState(false);
-  const [showProfilePage, setShowProfilePage] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState(null);
 
   // Load notifications
   const loadNotifications = useCallback(async () => {
@@ -75,16 +73,7 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
     setShowProfileEditPage(false);
   }, []);
 
-  // Handle profile page navigation
-  const handleViewProfile = useCallback((match) => {
-    setSelectedMatch(match);
-    setShowProfilePage(true);
-  }, []);
 
-  const handleBackFromProfile = useCallback(() => {
-    setShowProfilePage(false);
-    setSelectedMatch(null);
-  }, []);
 
 
   // Handle match decisions
@@ -135,6 +124,25 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
     );
   }
 
+  // Show match modal as full page
+  if (showMatchModal && currentMatch) {
+    console.log('🔍 Home: Opening MatchModal with match:', currentMatch);
+    return (
+      <div>
+        <ToastManager />
+        <MatchModal
+          match={currentMatch}
+          onAccept={() => handleMatchDecision(currentMatch.id, 'accepted')}
+          onReject={() => handleMatchDecision(currentMatch.id, 'rejected')}
+          onClose={() => setShowMatchModal(false)}
+          isVisible={showMatchModal}
+          currentUserId={currentUser?.id}
+          currentUser={currentUser}
+        />
+      </div>
+    );
+  }
+
   // Show profile edit page if requested
   if (showProfileEditPage) {
     return (
@@ -150,19 +158,7 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
     );
   }
 
-  // Show profile page if requested
-  if (showProfilePage && selectedMatch) {
-    return (
-      <div>
-        <ToastManager />
-        <ProfilePage
-          match={selectedMatch}
-          currentUser={currentUser}
-          onBack={handleBackFromProfile}
-        />
-      </div>
-    );
-  }
+
 
   return (
     <div className="h-screen bg-[#FBEEDA] flex flex-col">
@@ -188,7 +184,6 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
           setShowMatchModal={setShowMatchModal}
           loadMatchHistory={loadMatchHistory}
           loadNotifications={loadNotifications}
-          onViewProfile={handleViewProfile}
           onAcceptMatch={handleAcceptMatch}
           onRejectMatch={handleRejectMatch}
           onNavigateToChat={onNavigateToChatProp}
@@ -197,22 +192,6 @@ const Home = ({ me, avatar, isProfileComplete, onEditProfile, onEditPreferences,
           findMatches={findMatches}
         />
       </div>
-
-      {/* Match Modal */}
-      {showMatchModal && (
-        <>
-          {console.log('🔍 Home: Opening MatchModal with match:', currentMatch)}
-          <MatchModal
-            match={currentMatch}
-            onAccept={() => handleMatchDecision(currentMatch.id, 'accepted')}
-            onReject={() => handleMatchDecision(currentMatch.id, 'rejected')}
-            onClose={() => setShowMatchModal(false)}
-            isVisible={showMatchModal}
-            currentUserId={currentUser?.id}
-            currentUser={currentUser}
-          />
-        </>
-      )}
 
       {/* Notification Center */}
       <NotificationCenter

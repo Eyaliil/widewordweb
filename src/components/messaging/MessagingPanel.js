@@ -5,7 +5,8 @@ import { messagingService } from '../../services/messagingService';
 const MessagingPanel = ({ 
   selectedMatch, 
   currentUser, 
-  onClose 
+  onClose,
+  onMessageSent
 }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -133,6 +134,11 @@ const MessagingPanel = ({
         );
         
         console.log('✅ Message sent successfully');
+        
+        // Notify parent to reload conversations list
+        if (onMessageSent) {
+          onMessageSent();
+        }
       } else {
         console.error('Failed to send message:', result.error);
         

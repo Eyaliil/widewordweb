@@ -9,7 +9,7 @@ import { useAuth } from './context/AuthContext';
 function App() {
   const { currentUser, logout } = useAuth();
   const [currentView, setCurrentView] = useState('login');
-  const [me, setMe] = useState({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '', interests: [] });
+  const [me, setMe] = useState({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '', interests: [], userImages: [] });
   const [avatar, setAvatar] = useState({ type: 'emoji', image: null, emoji: '👤', initials: '' });
   const [lookingFor, setLookingFor] = useState({ genders: [], ageRange: [25, 35], interests: [], distance: 50, vibe: '', dealBreakers: [] });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -29,7 +29,8 @@ function App() {
         pronouns: currentUser.pronouns || '',
         city: currentUser.city || '',
         bio: currentUser.bio || '',
-        interests: currentUser.interests || []
+        interests: currentUser.interests || [],
+        userImages: currentUser.userImages || []
       });
       
       setAvatar(currentUser.avatar || { type: 'emoji', emoji: '👤', initials: '' });
@@ -92,7 +93,7 @@ function App() {
   const handleLogout = async () => {
     await logout();
     setCurrentView('login');
-    setMe({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '', interests: [] });
+    setMe({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '', interests: [], userImages: [] });
     setAvatar({ type: 'emoji', image: null, emoji: '👤', initials: '' });
     setLookingFor({ genders: [], ageRange: [25, 35], interests: [], distance: 50, vibe: '', dealBreakers: [] });
     setIsEditingProfile(false);
@@ -177,9 +178,13 @@ function App() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 py-8">
-        {renderCurrentView()}
-      </div>
+      {currentView === 'chat' ? (
+        renderCurrentView()
+      ) : (
+        <div className="container mx-auto px-4 py-8">
+          {renderCurrentView()}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { RiArrowLeftLine, RiImage2Line, RiCheckLine } from 'react-icons/ri';
+import { RiArrowLeftLine, RiCheckLine, RiCloseCircleLine, RiAddCircleLine } from 'react-icons/ri';
 import { getInterests, getPronouns, getGenders } from '../../services/lookupService';
 import { isProfileValid } from '../../utils/validation';
 import { useAuth } from '../../context/AuthContext';
@@ -13,6 +13,9 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [originalProfile, setOriginalProfile] = useState({ name: '', age: '', gender: '', pronouns: '', city: '', bio: '' });
+  const [userImages, setUserImages] = useState([]); // Array of up to 3 image URLs
+  const [originalUserImages, setOriginalUserImages] = useState([]); // Original images to track changes
+  const [originalAvatar, setOriginalAvatar] = useState({ type: 'emoji', image: null, emoji: '👤', initials: '' }); // Original avatar to track changes
 
   // Prefill form with existing profile from DB (once on mount) and load user_interests (about me)
   useEffect(() => {
@@ -37,6 +40,11 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
             bio: me.bio || ''
           });
           setOriginalInterests(me.interests || []);
+          // Load existing user images if any
+          setUserImages(me.userImages || []);
+          setOriginalUserImages(me.userImages || []);
+          // Load original avatar
+          setOriginalAvatar(avatar || { type: 'emoji', image: null, emoji: '👤', initials: '' });
         }
       } catch (e) {
         if (mounted) setLoadError(e.message || 'Failed to load your profile');
@@ -65,7 +73,20 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
     );
   }, [me.name, me.age, me.gender, me.pronouns, me.city, me.bio, originalProfile]);
 
-  const isDirty = profileDirty || interestsDirty;
+  const imagesDirty = useMemo(() => {
+    if (userImages.length !== originalUserImages.length) return true;
+    return userImages.some((img, index) => img !== originalUserImages[index]);
+  }, [userImages, originalUserImages]);
+
+  const avatarDirty = useMemo(() => {
+    if (avatar.type !== originalAvatar.type) return true;
+    if (avatar.image !== originalAvatar.image) return true;
+    if (avatar.emoji !== originalAvatar.emoji) return true;
+    if (avatar.initials !== originalAvatar.initials) return true;
+    return false;
+  }, [avatar, originalAvatar]);
+
+  const isDirty = profileDirty || interestsDirty || imagesDirty || avatarDirty;
 
   const saveMyInterests = async () => {
     // Save interests to database
@@ -76,6 +97,12 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
 
   const handleNext = async () => {
     if (!isProfileValid(me)) {
+      return;
+    }
+
+    // Require at least one photo
+    if (userImages.length === 0) {
+      setLoadError('Please upload at least one photo.');
       return;
     }
 
@@ -90,13 +117,18 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
         city: me.city,
         bio: me.bio,
         avatar: avatar,
-        interests: me.interests
+        interests: me.interests,
+        userImages: userImages // Add user images array
       };
 
       const result = await updateUserProfile(profileData);
       
       if (result.success) {
         console.log('✅ Profile saved successfully');
+        // Update original images to match current state
+        setOriginalUserImages([...userImages]);
+        // Update original avatar to match current state
+        setOriginalAvatar({ ...avatar });
         onNext();
       } else {
         console.error('❌ Failed to save profile:', result.error);
@@ -110,24 +142,49 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
     }
   };
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file && file.size <= 5 * 1024 * 1024) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setAvatar({ type: 'image', image: ev.target.result, emoji: '', initials: '' });
-      };
-      reader.readAsDataURL(file);
+  const handleImageUpload = (e, index) => {
+    const files = Array.from(e.target.files);
+    const newImages = [...userImages];
+    
+    files.forEach((file) => {
+      if (file && file.size <= 5 * 1024 * 1024 && newImages.length < 3) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const newImage = ev.target.result;
+          if (newImages.length < 3) {
+            if (index !== undefined && index < newImages.length) {
+              // Replace existing image
+              newImages[index] = newImage;
+            } else {
+              // Add new image
+              newImages.push(newImage);
+            }
+            setUserImages([...newImages]);
+            
+            // Set first image as avatar
+            if (newImages.length > 0) {
+              setAvatar({ type: 'image', image: newImages[0], emoji: '', initials: '' });
+            }
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
+
+  const handleRemoveImage = (index) => {
+    const newImages = userImages.filter((_, i) => i !== index);
+    setUserImages(newImages);
+    
+    // Update avatar to first remaining image
+    if (newImages.length > 0) {
+      setAvatar({ type: 'image', image: newImages[0], emoji: '', initials: '' });
+    } else {
+      setAvatar({ type: 'emoji', image: null, emoji: '👤', initials: '' });
     }
   };
 
-  const handleEmojiSelect = (emoji) => {
-    setAvatar({ type: 'emoji', image: null, emoji, initials: '' });
-  };
 
-  const handleInitialsChange = (initials) => {
-    setAvatar({ type: 'emoji', image: null, emoji: '', initials: initials.toUpperCase().slice(0, 2) });
-  };
 
   return (
     <div className="min-h-screen bg-[#FBEEDA] py-8">
@@ -143,9 +200,9 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
           </div>
           <button
             onClick={handleNext}
-            disabled={!isProfileValid(me) || saving || !isDirty}
+            disabled={!isProfileValid(me) || saving || !isDirty || userImages.length === 0}
             className={`px-6 py-2 font-semibold rounded-lg transition-all duration-250 flex items-center gap-2 ${
-              (!isProfileValid(me) || saving || !isDirty) 
+              (!isProfileValid(me) || saving || !isDirty || userImages.length === 0) 
                 ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed' 
                 : 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white hover:shadow-lg hover:-translate-y-0.5'
             }`}
@@ -171,53 +228,57 @@ const ProfileFormInternal = ({ me, setMe, avatar, setAvatar, onNext, onBack, sho
             <div className="mb-4 px-4 py-2 rounded-lg bg-red-50 text-red-700 text-sm border-l-4 border-[#BA0105]">{loadError}</div>
           )}
           <div className="space-y-6">
-            {/* Avatar chooser */}
-            <div className="border-2 border-dashed border-[#E8C99E] rounded-lg p-6 text-center bg-[#FBEEDA]">
-              <input type="file" accept="image/jpg,image/jpeg,image/png" onChange={handleImageUpload} className="hidden" id="image-upload" />
-              <label htmlFor="image-upload" className="cursor-pointer">
-                <div className="space-y-2">
-                  <div className="flex justify-center">
-                    <RiImage2Line className="text-4xl text-[#40002B]" />
-                  </div>
-                  <div className="text-sm text-[#8B6E58]">Upload a photo (JPG/PNG, 5MB)</div>
-                </div>
+            {/* Photos Section - Up to 3 images */}
+            <div>
+              <label className="block text-sm font-medium text-[#40002B] mb-3">
+                Your Photos <span className="text-[#8B6E58] font-normal">(Add up to 3 - First one is your profile picture)</span>
               </label>
-              {avatar?.type === 'image' && avatar?.image && (
-                <div className="mt-4">
-                  <img src={avatar.image} alt="Preview" className="w-24 h-24 rounded-full mx-auto object-cover border-4 border-white shadow" />
-                </div>
-              )}
-            </div>
-
-            <div className="border border-[#F9E6CA] rounded-lg p-4 bg-white">
-              <h3 className="text-sm font-medium text-[#40002B] mb-3 text-center">Or choose emoji/initials</h3>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {['💕','😊','🌟','🎭','🎨','🎵','🏃','📚','✈️','🍳'].map(emoji => (
-                  <button
-                    key={emoji}
-                    onClick={() => handleEmojiSelect(emoji)}
-                    className={`w-10 h-10 text-xl rounded-full flex items-center justify-center transition-all duration-250 ${
-                      avatar?.type === 'emoji' && avatar?.emoji === emoji 
-                        ? 'bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white shadow-md' 
-                        : 'bg-[#F9E6CA] hover:bg-[#FDF6EB]'
-                    }`}
-                  >
-                    {emoji}
-                  </button>
+              <div className="grid grid-cols-3 gap-4">
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="relative">
+                    {userImages[index] ? (
+                      <div className="relative group">
+                        <img 
+                          src={userImages[index]} 
+                          alt={`Photo ${index + 1}`}
+                          className="w-full h-40 object-cover rounded-xl border-2 border-[#F9E6CA] shadow-md"
+                        />
+                        {index === 0 && (
+                          <div className="absolute top-2 left-2 bg-gradient-to-r from-[#7B002C] to-[#40002B] text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                            Profile Pic
+                          </div>
+                        )}
+                        <button
+                          onClick={() => handleRemoveImage(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-600"
+                          aria-label="Remove photo"
+                        >
+                          <RiCloseCircleLine className="text-xl" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-[#E8C99E] rounded-xl cursor-pointer hover:border-[#7B002C] hover:bg-[#FDF6EB] transition-all duration-200 bg-[#FBEEDA] group">
+                        <input
+                          type="file"
+                          accept="image/jpg,image/jpeg,image/png"
+                          onChange={(e) => handleImageUpload(e, index)}
+                          className="hidden"
+                        />
+                        <RiAddCircleLine className="text-3xl text-[#8B6E58] group-hover:text-[#7B002C] transition-colors" />
+                        <span className="text-xs text-[#8B6E58] group-hover:text-[#7B002C] font-medium mt-2">Add Photo</span>
+                      </label>
+                    )}
+                  </div>
                 ))}
               </div>
-              <div className="mt-3">
-                <label className="block text-xs text-[#8B6E58] mb-1">Or use initials</label>
-                <input type="text" value={avatar?.initials || ''} onChange={(e) => handleInitialsChange(e.target.value)} maxLength={2} className="w-full px-3 py-2 border border-[#E8C99E] rounded-lg text-center text-xl font-bold focus:ring-2 focus:ring-[#7B002C] focus:ring-opacity-20 focus:border-[#7B002C]" placeholder="AB" />
+              <div className="mt-4 p-3 bg-[#FBEEDA] rounded-lg border border-[#F9E6CA]">
+                <p className="text-xs text-[#8B6E58] text-center">
+                  📸 Upload 1-3 photos of yourself. Your first photo will be your main profile picture.
+                </p>
               </div>
-              {(avatar?.type === 'emoji' && (avatar?.emoji || avatar?.initials)) && (
-                <div className="mt-3 text-center">
-                  <div className="w-20 h-20 bg-gradient-to-br from-[#7B002C] to-[#40002B] rounded-full mx-auto flex items-center justify-center text-4xl border-4 border-white shadow-lg">
-                    {avatar.initials || avatar.emoji}
-                  </div>
-                </div>
-              )}
             </div>
+
+
 
             {/* Profile fields */}
             <div>

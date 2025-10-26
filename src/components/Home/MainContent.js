@@ -10,10 +10,11 @@ const MainContent = ({
   findMatches,
   databaseUsers,
   populateMatchedUser,
-  onViewProfile,
   onAcceptMatch,
   onRejectMatch,
-  onNavigateToChat
+  onNavigateToChat,
+  setCurrentMatch,
+  setShowMatchModal
 }) => {
   return (
     <div className="flex-1 overflow-y-auto bg-[#FBEEDA]">
@@ -87,8 +88,10 @@ const MainContent = ({
                     key={match.id}
                     className="bg-white rounded-xl p-5 shadow-md hover:shadow-lg transition-all duration-250 stagger-item cursor-pointer border border-[#F9E6CA] hover:-translate-y-1"
                     onClick={() => {
-                      if (onViewProfile) {
-                        onViewProfile(match);
+                      // Open match modal with full details
+                      if (setCurrentMatch && setShowMatchModal) {
+                        setCurrentMatch(match);
+                        setShowMatchModal(true);
                       }
                     }}
                   >

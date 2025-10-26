@@ -1,5 +1,5 @@
 import React from 'react';
-import { RiCloseLine, RiCheckLine, RiCloseCircleLine, RiHeartFill, RiHeart3Fill, RiSparklingLine, RiUserLine, RiMapPinLine, RiNumbersLine } from 'react-icons/ri';
+import { RiCloseLine, RiCheckLine, RiCloseCircleLine, RiHeartFill, RiHeart3Fill, RiSparklingLine, RiUserLine, RiMapPinLine, RiNumbersLine, RiEmotionLine, RiGroupLine, RiTimeLine, RiFilterLine, RiHeartAddLine, RiTeamLine, RiEmotionHappyLine, RiMapPinRangeFill } from 'react-icons/ri';
 
 const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUserId, currentUser }) => {
   
@@ -37,8 +37,8 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
     console.error('MatchModal: matchedUser:', matchedUser);
     console.error('MatchModal: currentUserId:', currentUserId);
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div className="bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-2xl p-6">
+      <div className="min-h-screen bg-[#FBEEDA] flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl p-6">
           <div className="text-center">
             <h2 className="text-xl font-semibold text-[#40002B] mb-4">Match Error</h2>
             <p className="text-[#8B6E58] mb-4">Unable to load match details. Please try again.</p>
@@ -55,8 +55,9 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl modal-enter">
+    <div className="min-h-screen bg-[#FBEEDA]">
+      <div className="max-w-2xl mx-auto py-6 px-4">
+        <div className="bg-white rounded-2xl overflow-hidden shadow-xl">
         {/* Header */}
         <div className="bg-gradient-to-br from-[#7B002C] to-[#40002B] text-white p-6 relative">
           <div className="flex items-center justify-between mb-4">
@@ -105,11 +106,23 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
         <div className="p-6">
           {/* Basic Info */}
           <div className="mb-6">
-            <div className="flex items-center gap-4 text-sm text-[#8B6E58] mb-4">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-[#8B6E58] mb-4">
               <div className="flex items-center gap-1.5">
                 <RiNumbersLine className="text-base" />
                 <span>{matchedUser.age} years old</span>
               </div>
+              {matchedUser.gender && (
+                <div className="flex items-center gap-1.5">
+                  <RiUserLine className="text-base" />
+                  <span>{matchedUser.gender}</span>
+                </div>
+              )}
+              {matchedUser.pronouns && (
+                <div className="flex items-center gap-1.5">
+                  <RiEmotionLine className="text-base" />
+                  <span>{matchedUser.pronouns}</span>
+                </div>
+              )}
               {matchedUser.city && (
                 <div className="flex items-center gap-1.5">
                   <RiMapPinLine className="text-base" />
@@ -117,12 +130,109 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
                 </div>
               )}
             </div>
-            <div className="bg-[#FBEEDA] rounded-xl p-4">
+            
+            {/* Bio */}
+            <div className="bg-[#FBEEDA] rounded-xl p-4 mb-4">
               <p className="text-[#40002B] text-sm leading-relaxed">
                 {matchedUser.bio || 'No bio available yet.'}
               </p>
             </div>
+            
+            {/* Interests */}
+            {matchedUser.interests && matchedUser.interests.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-[#40002B] mb-2 flex items-center gap-1.5">
+                  <RiGroupLine className="text-base" />
+                  <span>Interests</span>
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {matchedUser.interests.slice(0, 6).map((interest, index) => (
+                    <span 
+                      key={index} 
+                      className="px-3 py-1.5 bg-[#F9E6CA] border border-[#E8C99E] text-[#40002B] rounded-lg text-xs font-medium"
+                    >
+                      {interest}
+                    </span>
+                  ))}
+                  {matchedUser.interests.length > 6 && (
+                    <span className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium">
+                      +{matchedUser.interests.length - 6} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Match Details */}
+          <div className="mb-4 p-3 bg-white border border-[#F9E6CA] rounded-lg">
+            <div className="flex items-center justify-between text-xs text-[#8B6E58]">
+              <div className="flex items-center gap-1.5">
+                <RiTimeLine className="text-base" />
+                <span>Matched {match.created_at ? new Date(match.created_at).toLocaleDateString() : 'Recently'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* User Preferences Section */}
+          {matchedUser.preferences && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-[#40002B] mb-3 flex items-center gap-2">
+                <RiFilterLine />
+                <span>What they're looking for</span>
+              </h3>
+              <div className="space-y-3 bg-[#FBEEDA] rounded-xl p-4">
+                {/* Age Range */}
+                {matchedUser.preferences.ageRange && (
+                  <div className="flex items-center gap-2 text-xs text-[#40002B]">
+                    <RiNumbersLine className="text-base text-[#7B002C]" />
+                    <span className="font-medium">Age: </span>
+                    <span>{matchedUser.preferences.ageRange[0]} - {matchedUser.preferences.ageRange[1]} years old</span>
+                  </div>
+                )}
+                
+                {/* Preferred Genders */}
+                {matchedUser.preferences.genders && matchedUser.preferences.genders.length > 0 && (
+                  <div className="flex items-start gap-2 text-xs text-[#40002B]">
+                    <RiHeartAddLine className="text-base text-[#7B002C] mt-0.5" />
+                    <div className="flex-1">
+                      <span className="font-medium">Interested in: </span>
+                      <span>{matchedUser.preferences.genders.join(', ')}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Relationship Types */}
+                {matchedUser.preferences.relationshipTypes && matchedUser.preferences.relationshipTypes.length > 0 && (
+                  <div className="flex items-start gap-2 text-xs text-[#40002B]">
+                    <RiTeamLine className="text-base text-[#7B002C] mt-0.5" />
+                    <div className="flex-1">
+                      <span className="font-medium">Looking for: </span>
+                      <span>{matchedUser.preferences.relationshipTypes.join(', ')}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Vibe */}
+                {matchedUser.preferences.vibe && (
+                  <div className="flex items-center gap-2 text-xs text-[#40002B]">
+                    <RiEmotionHappyLine className="text-base text-[#7B002C]" />
+                    <span className="font-medium">Vibe: </span>
+                    <span>{matchedUser.preferences.vibe}</span>
+                  </div>
+                )}
+                
+                {/* Max Distance */}
+                {matchedUser.preferences.maxDistance && (
+                  <div className="flex items-center gap-2 text-xs text-[#40002B]">
+                    <RiMapPinRangeFill className="text-base text-[#7B002C]" />
+                    <span className="font-medium">Within: </span>
+                    <span>{matchedUser.preferences.maxDistance} km</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Match Reasons / Shared Interests */}
           {matchReasons && matchReasons.length > 0 && (
@@ -207,6 +317,7 @@ const MatchModal = ({ match, onAccept, onReject, onClose, isVisible, currentUser
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

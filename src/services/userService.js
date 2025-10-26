@@ -14,7 +14,7 @@ export class NameBasedUserService {
         .eq('name', name)
         .eq('is_active', true)
         .single();
-
+      
       if (existingUser && !findError) {
         console.log(`✅ Found existing user: ${name}`);
         
@@ -55,7 +55,7 @@ export class NameBasedUserService {
         })
         .select()
         .single();
-
+      
       if (createError) {
         console.error('❌ Error creating user:', createError);
         return { success: false, error: createError.message };
@@ -163,6 +163,15 @@ export class NameBasedUserService {
 
       const interests = interestsData?.map(ui => ui.interests.label) || [];
 
+      // Get user images
+      const { data: imagesData } = await supabase
+        .from('user_images')
+        .select('image_url, image_order')
+        .eq('user_id', userId)
+        .order('image_order', { ascending: true });
+
+      const userImages = imagesData?.map(img => img.image_url) || [];
+
       const result = {
         id: profile.user_id,
         name: profile.name,
@@ -178,7 +187,8 @@ export class NameBasedUserService {
           image: profile.avatar_image_url || null
         },
         interests: interests,
-        isProfileComplete: profile.is_profile_complete
+        isProfileComplete: profile.is_profile_complete,
+        userImages: userImages
       };
 
       console.log('✅ Complete profile data:', result);
@@ -250,11 +260,48 @@ export class NameBasedUserService {
         await this.updateUserInterests(userId, profileData.interests);
       }
 
+      // Save user images to user_images table
+      if (profileData.userImages && Array.isArray(profileData.userImages)) {
+        await this.saveUserImages(userId, profileData.userImages);
+      }
+
       console.log('✅ Profile updated successfully');
       return { success: true, profile: data };
     } catch (error) {
       console.error('❌ Error in updateProfile:', error);
       return { success: false, error: error.message };
+    }
+  }
+
+  // Save user images to database
+  async saveUserImages(userId, imageUrls) {
+    try {
+      // Delete existing images for this user
+      await supabase
+        .from('user_images')
+        .delete()
+        .eq('user_id', userId);
+
+      // Insert new images with their order
+      if (imageUrls.length > 0) {
+        const imagesToInsert = imageUrls.map((url, index) => ({
+          user_id: userId,
+          image_url: url,
+          image_order: index
+        }));
+
+        const { error } = await supabase
+          .from('user_images')
+          .insert(imagesToInsert);
+
+        if (error) {
+          console.error('❌ Error saving user images:', error);
+        } else {
+          console.log(`✅ Saved ${imagesToInsert.length} user images`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in saveUserImages:', error);
     }
   }
 
@@ -496,6 +543,9 @@ export class NameBasedUserService {
       return null;
     }
   }
+
+
+
 
   // Test database connection
   async testDatabaseConnection() {

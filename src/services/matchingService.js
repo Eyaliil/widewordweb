@@ -363,7 +363,7 @@ export class SupabaseMatchingService {
       const userIds = matches.flatMap(match => [match.user1_id, match.user2_id]);
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('user_id, name, age, city, bio, avatar_type, avatar_emoji')
+        .select('user_id, name, age, city, bio, avatar_type, avatar_emoji, avatar_initials, avatar_image_url, gender_id, pronouns_id')
         .in('user_id', userIds);
 
       if (profilesError) {
@@ -371,9 +371,65 @@ export class SupabaseMatchingService {
         return [];
       }
 
+      // Get gender and pronouns data
+      const genderIds = profiles.map(p => p.gender_id).filter(Boolean);
+      const pronounsIds = profiles.map(p => p.pronouns_id).filter(Boolean);
+      
+      const { data: genders } = await supabase.from('genders').select('id, label').in('id', genderIds);
+      const { data: pronounsData } = await supabase.from('pronouns').select('id, label').in('id', pronounsIds);
+      
+      const genderMap = genders?.reduce((acc, g) => ({ ...acc, [g.id]: g.label }), {}) || {};
+      const pronounsMap = pronounsData?.reduce((acc, p) => ({ ...acc, [p.id]: p.label }), {}) || {};
+      
+      // Get interests for all users
+      const { data: userInterestsData } = await supabase
+        .from('user_interests')
+        .select('user_id, interest_id, interests(label)')
+        .in('user_id', userIds);
+      
+      const interestsMap = {};
+      userInterestsData?.forEach(ui => {
+        if (!interestsMap[ui.user_id]) interestsMap[ui.user_id] = [];
+        if (ui.interests) interestsMap[ui.user_id].push(ui.interests.label);
+      });
+      
+      // Get search preferences for all users
+      const { data: searchProfiles } = await supabase
+        .from('user_search_profile')
+        .select('user_id, min_age, max_age, genders, relationship_types, vibe_id, vibe_description, max_distance')
+        .in('user_id', userIds);
+      
+      // Get relationship types and vibes
+      const relTypeIds = [...new Set(searchProfiles?.flatMap(sp => sp.relationship_types || []))];
+      const vibeIds = searchProfiles?.map(sp => sp.vibe_id).filter(Boolean);
+      
+      const { data: relationshipTypes } = await supabase.from('relationship_types').select('id, label').in('id', relTypeIds);
+      const { data: vibes } = await supabase.from('vibes').select('id, label').in('id', vibeIds);
+      
+      const relTypesMap = relationshipTypes?.reduce((acc, rt) => ({ ...acc, [rt.id]: rt.label }), {}) || {};
+      const vibesMap = vibes?.reduce((acc, v) => ({ ...acc, [v.id]: v.label }), {}) || {};
+      
+      const searchPrefsMap = {};
+      searchProfiles?.forEach(sp => {
+        searchPrefsMap[sp.user_id] = {
+          ageRange: [sp.min_age, sp.max_age],
+          genders: sp.genders || [],
+          relationshipTypes: (sp.relationship_types || []).map(rtId => relTypesMap[rtId]).filter(Boolean),
+          vibe: sp.vibe_id ? vibesMap[sp.vibe_id] : null,
+          vibeDescription: sp.vibe_description,
+          maxDistance: sp.max_distance
+        };
+      });
+
       // Create a map of user_id to profile for quick lookup
       const profileMap = profiles.reduce((acc, profile) => {
-        acc[profile.user_id] = profile;
+        acc[profile.user_id] = {
+          ...profile,
+          gender: profile.gender_id ? genderMap[profile.gender_id] : null,
+          pronouns: profile.pronouns_id ? pronounsMap[profile.pronouns_id] : null,
+          interests: interestsMap[profile.user_id] || [],
+          preferences: searchPrefsMap[profile.user_id] || null
+        };
         return acc;
       }, {});
 
@@ -399,9 +455,15 @@ export class SupabaseMatchingService {
               age: user2Profile.age,
               city: user2Profile.city,
               bio: user2Profile.bio,
+              gender: user2Profile.gender,
+              pronouns: user2Profile.pronouns,
+              interests: user2Profile.interests,
+              preferences: user2Profile.preferences,
               avatar: {
                 type: user2Profile.avatar_type,
-                emoji: user2Profile.avatar_emoji
+                emoji: user2Profile.avatar_emoji,
+                initials: user2Profile.avatar_initials,
+                image: user2Profile.avatar_image_url
               }
             } : {
               id: match.user2_id,
@@ -417,9 +479,15 @@ export class SupabaseMatchingService {
               age: user1Profile.age,
               city: user1Profile.city,
               bio: user1Profile.bio,
+              gender: user1Profile.gender,
+              pronouns: user1Profile.pronouns,
+              interests: user1Profile.interests,
+              preferences: user1Profile.preferences,
               avatar: {
                 type: user1Profile.avatar_type,
-                emoji: user1Profile.avatar_emoji
+                emoji: user1Profile.avatar_emoji,
+                initials: user1Profile.avatar_initials,
+                image: user1Profile.avatar_image_url
               }
             } : {
               id: match.user1_id,
@@ -430,15 +498,21 @@ export class SupabaseMatchingService {
 
           uniqueMatches.push({
             id: match.id,
-            user1Id: match.user1_id,
-            user2Id: match.user2_id,
-            user1Decision: match.user1_decision,
+            user1_id: match.user1_id,
+            user2_id: match.user2_id,
+            user1_decision: match.user1_decision,
+            user2_decision: match.user2_decision,
+            user1Decision: match.user1_decision, // Also include camelCase for backwards compatibility
             user2Decision: match.user2_decision,
+            match_score: match.match_score,
             matchScore: match.match_score,
+            match_reasons: match.match_reasons,
             matchReasons: match.match_reasons,
             matchedUser: matchedUserData,
+            created_at: match.created_at,
             createdAt: new Date(match.created_at),
             status: match.status,
+            expires_at: match.expires_at,
             expiresAt: new Date(match.expires_at)
           });
         }
@@ -464,18 +538,31 @@ export class SupabaseMatchingService {
       return { success: false, error: 'Match not found' };
     }
 
-    // Check if match is still active
-    if (match.status !== 'pending') {
-      return { success: false, error: 'Match is no longer active' };
+    // Check if the current user has already made a decision
+    if (match.user1_id === userId && match.user1_decision !== 'pending') {
+      return { success: false, error: 'You have already responded to this match' };
+    }
+    if (match.user2_id === userId && match.user2_decision !== 'pending') {
+      return { success: false, error: 'You have already responded to this match' };
+    }
+    
+    // Check if match has been completed (both decisions made)
+    if (match.status === 'mutual_match' || match.status === 'rejected') {
+      return { success: false, error: 'Match has already been completed' };
     }
 
-    // Check if match has expired
+    // Check if match has expired - only block if both users have made decisions
     if (new Date() > new Date(match.expires_at)) {
-      await supabase
-        .from('matches')
-        .update({ status: 'expired', completed_at: new Date().toISOString() })
-        .eq('id', matchId);
-      return { success: false, error: 'Match has expired' };
+      // Only mark as expired if both users have made decisions
+      if (match.user1_decision !== 'pending' && match.user2_decision !== 'pending') {
+        await supabase
+          .from('matches')
+          .update({ status: 'expired', completed_at: new Date().toISOString() })
+          .eq('id', matchId);
+        return { success: false, error: 'Match has expired' };
+      }
+      // If match is expired but user hasn't made a decision yet, allow them to respond
+      console.log('⚠️ Match has expired but allowing user to respond');
     }
 
     // Update the decision for the current user
@@ -499,9 +586,21 @@ export class SupabaseMatchingService {
       return { success: false, error: updateError.message };
     }
 
+    // Reload the match to get the latest status
+    const { data: latestMatch, error: reloadError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('id', matchId)
+      .single();
+
+    if (reloadError || !latestMatch) {
+      console.error('❌ Error reloading match:', reloadError);
+      return { success: false, error: 'Failed to reload match status' };
+    }
+
     // Check if both users have made decisions
-    if (updatedMatch.user1_decision !== 'pending' && updatedMatch.user2_decision !== 'pending') {
-      const finalStatus = (updatedMatch.user1_decision === 'accepted' && updatedMatch.user2_decision === 'accepted') 
+    if (latestMatch.user1_decision !== 'pending' && latestMatch.user2_decision !== 'pending') {
+      const finalStatus = (latestMatch.user1_decision === 'accepted' && latestMatch.user2_decision === 'accepted') 
         ? 'mutual_match' 
         : 'rejected';
       
@@ -513,11 +612,14 @@ export class SupabaseMatchingService {
         })
         .eq('id', matchId);
 
+      // Update the returned match object
+      updatedMatch.status = finalStatus;
+
       if (finalStatus === 'mutual_match') {
-        console.log(`🎉 Mutual match! ${updatedMatch.user1_id} and ${updatedMatch.user2_id} both accepted`);
-        await this.createMutualMatchNotification(updatedMatch);
+        console.log(`🎉 Mutual match! ${latestMatch.user1_id} and ${latestMatch.user2_id} both accepted`);
+        await this.createMutualMatchNotification(latestMatch);
       } else {
-        console.log(`❌ Match rejected: ${updatedMatch.user1_id} (${updatedMatch.user1_decision}) and ${updatedMatch.user2_id} (${updatedMatch.user2_decision})`);
+        console.log(`❌ Match rejected: ${latestMatch.user1_id} (${latestMatch.user1_decision}) and ${latestMatch.user2_id} (${latestMatch.user2_decision})`);
       }
     } else {
       console.log(`⏳ ${userId} made decision: ${decision}. Waiting for other user...`);

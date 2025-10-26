@@ -849,7 +849,7 @@ export class ScalableMatchingService {
         .from('user_search_profile')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.warn('⚠️ Could not fetch user search preferences:', error.message);

@@ -65,6 +65,18 @@ const ChatPage = ({ onBack, initialMatchId }) => {
                 unreadCount: 0
               };
               setSelectedConversation(newConversation);
+              
+              // Add to conversations list immediately (check for duplicates first)
+              setConversations(prevConversations => {
+                // Check if conversation already exists
+                const alreadyExists = prevConversations.some(c => c.matchId === matchId);
+                if (alreadyExists) {
+                  console.log('⚠️ Conversation already exists, not adding duplicate');
+                  return prevConversations;
+                }
+                console.log('✅ Adding new conversation to list');
+                return [newConversation, ...prevConversations];
+              });
             }
           }
         } catch (error) {
@@ -124,9 +136,9 @@ const ChatPage = ({ onBack, initialMatchId }) => {
   };
 
   return (
-    <div className="h-screen bg-[#FBEEDA] flex flex-col">
+    <div className="fixed inset-0 bg-[#FBEEDA] flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-[#F9E6CA] px-6 py-4">
+      <div className="bg-white border-b border-[#F9E6CA] px-6 py-4 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
@@ -156,7 +168,7 @@ const ChatPage = ({ onBack, initialMatchId }) => {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Conversations List - Left Sidebar */}
-        <div className="w-80 bg-white border-r border-[#F9E6CA] flex flex-col">
+        <div className="w-96 bg-white border-r border-[#F9E6CA] flex flex-col shrink-0">
           {/* Search Bar */}
           <div className="p-4 border-b border-[#F9E6CA]">
             <div className="relative">
@@ -262,7 +274,7 @@ const ChatPage = ({ onBack, initialMatchId }) => {
         </div>
 
         {/* Chat Area - Right Side */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col bg-[#FBEEDA]">
           {selectedConversation ? (
             <MessagingPanel
               selectedMatch={{
@@ -275,17 +287,21 @@ const ChatPage = ({ onBack, initialMatchId }) => {
               }}
               currentUser={currentUser}
               onClose={() => setSelectedConversation(null)}
+              onMessageSent={() => {
+                // Reload conversations list to update last message
+                loadConversations();
+              }}
             />
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-gray-50">
-              <div className="text-center text-gray-500 p-6">
-                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center p-6">
+                <div className="w-20 h-20 bg-[#F9E6CA] rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg className="w-10 h-10 text-[#40002B]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-700 mb-2">Select a conversation</h3>
-                <p className="text-sm text-gray-500">Choose a conversation from the list to start chatting</p>
+                <h3 className="text-xl font-semibold text-[#40002B] mb-2">Select a conversation</h3>
+                <p className="text-sm text-[#8B6E58]">Choose a conversation from the list to start chatting</p>
               </div>
             </div>
           )}

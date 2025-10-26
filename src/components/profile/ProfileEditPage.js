@@ -2,6 +2,18 @@ import React from 'react';
 import { RiUserLine, RiSettingsLine, RiArrowLeftLine } from 'react-icons/ri';
 
 const ProfileEditPage = ({ currentUser, onEditProfile, onEditPreferences, onBack }) => {
+  // Get user's profile picture
+  const getProfilePicture = () => {
+    if (currentUser?.userImages && currentUser.userImages.length > 0) {
+      return currentUser.userImages[0];
+    }
+    if (currentUser?.avatar?.image) {
+      return currentUser.avatar.image;
+    }
+    return null;
+  };
+
+  const profilePicture = getProfilePicture();
   return (
     <div className="min-h-screen bg-[#FBEEDA] flex items-center justify-center p-4">
       <div className="max-w-md w-full">
@@ -14,8 +26,16 @@ const ProfileEditPage = ({ currentUser, onEditProfile, onEditPreferences, onBack
             <RiArrowLeftLine className="text-lg" />
             <span>Back</span>
           </button>
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#7B002C] to-[#40002B] rounded-full mb-6">
-            <RiUserLine className="text-4xl text-white" />
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#7B002C] to-[#40002B] rounded-full mb-6 overflow-hidden border-4 border-white shadow-lg">
+            {profilePicture ? (
+              <img 
+                src={profilePicture} 
+                alt={currentUser?.name || 'Profile'} 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <RiUserLine className="text-4xl text-white" />
+            )}
           </div>
           <h1 className="text-3xl font-semibold text-[#40002B] mb-2">Edit Your Profile</h1>
           <p className="text-[#8B6E58]">Choose what you'd like to update</p>
